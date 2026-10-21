@@ -41,7 +41,7 @@ jobs:
           - arch: AArch64
             triple: aarch64-none-linux-gnu
             toolchain-extra-cmake:
-            extra-cmake: -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_CXX_FLAGS="--sysroot=$AARCH64_TOOLCHAIN/aarch64-none-linux-gnu/libc/ --gcc-toolchain=$AARCH64_TOOLCHAIN -march=armv9.2-a" -DCMAKE_CROSSCOMPILING_EMULATOR="qemu-aarch64;-L;$AARCH64_TOOLCHAIN/aarch64-none-linux-gnu/libc"
+            extra-cmake: -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSROOT=$AARCH64_TOOLCHAIN/aarch64-none-linux-gnu/libc/ -DCMAKE_C_FLAGS="--gcc-toolchain=$AARCH64_TOOLCHAIN -march=armv9.2-a" -DCMAKE_CXX_FLAGS="--gcc-toolchain=$AARCH64_TOOLCHAIN -march=armv9.2-a" -DCMAKE_CROSSCOMPILING_EMULATOR="qemu-aarch64;-L;$AARCH64_TOOLCHAIN/aarch64-none-linux-gnu/libc"
 
     steps:
       - name: Checkout Ripple test suite
