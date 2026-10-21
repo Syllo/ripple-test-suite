@@ -1,0 +1,265 @@
+name: Ripple Test Suite CI
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches:
+      - main
+    paths:
+      - "CMakeLists.txt"
+      - "cmake/**"
+      - "include/**"
+      - "mini_apps/**"
+      - "regression/**"
+      - ".github/**"
+
+jobs:
+  build_and_test:
+    if: github.repository_owner == 'qualcomm'
+    name: Build and test (${{ matrix.targets.arch }})
+    runs-on: [self-hosted, ripple-ci]
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        targets:
+          - arch: X86
+            triple: x86_64-unknown-linux-gnu
+            toolchain-extra-cmake: -DLLVM_ENABLE_RUNTIMES=compiler-rt -DCOMPILER_RT_BUILD_BUILTINS=ON -DCOMPILER_RT_HAS_x86_64_BFLOAT16=ON
+            extra-cmake: -DCMAKE_CXX_FLAGS=-rtlib=compiler-rt -DCMAKE_CXX_STANDARD_LIBRARIES=-lunwind -DISPC_EXECUTABLE=$ISPC_EXECUTABLE
+          - arch: AArch64
+            triple: aarch64-none-linux-gnu
+            toolchain-extra-cmake:
+            extra-cmake: -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_CXX_FLAGS="--sysroot=$AARCH64_TOOLCHAIN/aarch64-none-linux-gnu/libc/ --gcc-toolchain=$AARCH64_TOOLCHAIN -march=armv9.2-a" -DCMAKE_CROSSCOMPILING_EMULATOR="qemu-aarch64;-L;$AARCH64_TOOLCHAIN/aarch64-none-linux-gnu/libc"
+
+    steps:
+      - name: Checkout Ripple test suite
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ripple-test-suite
+          persist-credentials: false
+
+      - name: Checkout Ripple compiler
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: qualcomm/ripple
+          path: ripple
+          persist-credentials: false
+
+      - name: Show Ripple compiler revision
+        run: git -C ripple rev-parse HEAD
+
+      - name: Remove stale build directory
+        run: rm -rf build
+
+      - name: Configure
+        run: |
+          cmake -G Ninja -S ripple/llvm -B build \
+            ${CMAKE_HOST_OPT-} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_ENABLE_ASSERTIONS=OFF \
+            -DLLVM_ENABLE_PROJECTS="clang;lld" \
+            -DLLVM_TARGETS_TO_BUILD=${{ matrix.targets.arch }} \
+            -DLLVM_DEFAULT_TARGET_TRIPLE=${{ matrix.targets.triple }} \
+            -DCLANG_DEFAULT_LINKER=lld \
+            ${{ matrix.targets.toolchain-extra-cmake }}
+
+      - name: Build Ripple compiler
+        run: cmake --build build
+
+      - name: Install Ripple Compiler
+        run: cmake --install build --prefix ${{ github.workspace }}/install
+
+      - name: Show QEMU version
+        if: matrix.targets.arch == 'AArch64'
+        run: qemu-aarch64 --version
+
+      - name: Remove stale Ripple test-suite build directory
+        run: rm -rf build-ripple-test-suite
+
+      - name: Configure Ripple Test Suite
+        run: |
+          cmake -G Ninja -S ripple-test-suite -B build-ripple-test-suite \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=${{ github.workspace }}/install/bin/clang++ \
+            ${{ matrix.targets.extra-cmake }}
+
+      - name: Build Ripple Test Suite
+        run: cmake --build build-ripple-test-suite
+
+      - name: Run Ripple Test Suite
+        run: cmake --build build-ripple-test-suite --target check -- -k 0
+
+  hexagon_build_and_test:
+    if: github.repository_owner == 'qualcomm'
+    name: Build and test (Hexagon)
+    runs-on: [self-hosted, ripple-ci]
+    timeout-minutes: 90
+    strategy:
+      fail-fast: true
+      matrix:
+        targets:
+          - arch: Hexagon
+            triple: hexagon-unknown-unknown-elf
+            arch_version: v81
+            cxx_flags: -stdlib=libc++ -D_USE_GENERIC_XLOCALE_SHIMS -D_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE -D_C99 -D_C_AS_CPP -D_HAS_GENERIC_TEMPLATES=0
+            sdk: qualcomm-community-edition
+
+    steps:
+      - name: Checkout Ripple test suite
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ripple-test-suite
+          persist-credentials: false
+
+      - name: Checkout Ripple compiler
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: qualcomm/ripple
+          path: ripple
+          persist-credentials: false
+
+      - name: Show Ripple compiler revision
+        run: git -C ripple rev-parse HEAD
+
+      - name: Remove stale build directory
+        run: rm -rf build
+
+      - name: Clone eld
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: qualcomm/eld
+          # Track ELD fixes on the branch compatible with this LLVM release.
+          ref: release/23.x
+          path: eld
+          persist-credentials: false
+
+      - name: Show ELD revision
+        run: git -C eld rev-parse HEAD
+
+      - name: Configure
+        run: |
+          cmake -G Ninja -S ripple/llvm -B build \
+            ${CMAKE_HOST_OPT-} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_ENABLE_ASSERTIONS=OFF \
+            -DLLVM_ENABLE_PROJECTS="clang" \
+            -DLLVM_EXTERNAL_PROJECTS=eld \
+            -DLLVM_EXTERNAL_ELD_SOURCE_DIR=eld \
+            -DLLVM_TARGETS_TO_BUILD=${{ matrix.targets.arch }} \
+            -DLLVM_DEFAULT_TARGET_TRIPLE=${{ matrix.targets.triple }}
+
+      - name: Build Ripple compiler
+        run: cmake --build build
+
+      - name: Setup Hexagon SDK community edition environment
+        if: matrix.targets.sdk == 'qualcomm-community-edition'
+        shell: bash
+        run: |
+          if [ -z "${HEXAGON_SDK:-}" ]; then
+            echo "ERROR: HEXAGON_SDK is not set" >&2; exit 1
+          fi
+          if [ ! -f "$HEXAGON_SDK/setup_sdk_env.source" ]; then
+            echo "ERROR: $HEXAGON_SDK/setup_sdk_env.source not found" >&2; exit 1
+          fi
+          # HEXAGON_SDK_ROOT must be unset: setup_sdk_env.source uses it as an output variable
+          unset HEXAGON_SDK_ROOT
+          . "$HEXAGON_SDK/setup_sdk_env.source"
+          if [ -z "${DEFAULT_HEXAGON_TOOLS_ROOT:-}" ]; then
+            echo "ERROR: setup_sdk_env.source did not set DEFAULT_HEXAGON_TOOLS_ROOT" >&2; exit 1
+          fi
+          echo "HEXAGON_SDK_ROOT=$HEXAGON_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "HEXAGON_TOOLS_ROOT=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools" >> "$GITHUB_ENV"
+          echo "HEXAGON_ARCH_VERSION=${{ matrix.targets.arch_version }}" >> "$GITHUB_ENV"
+          echo "CI_CMAKE_CROSSCOMPILING_EMULATOR=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-sim;--simulated_returnval;--" >> "$GITHUB_ENV"
+          echo "CI_HEXAGON_SYSROOT=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools/target/hexagon" >> "$GITHUB_ENV"
+
+      - name: Fail on unknown SDK
+        if: matrix.targets.sdk != 'qualcomm-community-edition'
+        env:
+          SDK_VALUE: ${{ matrix.targets.sdk }}
+        run: |
+          echo "ERROR: Unknown sdk value '$SDK_VALUE'" >&2; exit 1
+
+      - name: Validate Hexagon SDK environment
+        run: |
+          if [ -z "${CI_HEXAGON_SYSROOT:-}" ]; then
+            echo "ERROR: CI_HEXAGON_SYSROOT is not set" >&2; exit 1
+          fi
+          if [ ! -d "$CI_HEXAGON_SYSROOT" ]; then
+            echo "ERROR: Sysroot directory not found: $CI_HEXAGON_SYSROOT" >&2; exit 1
+          fi
+          if [ -z "${CI_CMAKE_CROSSCOMPILING_EMULATOR:-}" ]; then
+            echo "ERROR: CI_CMAKE_CROSSCOMPILING_EMULATOR is not set" >&2; exit 1
+          fi
+
+      - name: Install Ripple Compiler
+        run: cmake --install build --prefix ${{ github.workspace }}/install
+
+      - name: Remove stale compiler-rt build directory
+        run: rm -rf build-compiler-rt
+
+      - name: Configure compiler-rt
+        run: |
+          cmake -G Ninja -S ripple/compiler-rt -B build-compiler-rt \
+            -DLLVM_CMAKE_DIR=${{ github.workspace }}/install \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_ENABLE_ASSERTIONS=OFF \
+            -DCMAKE_C_COMPILER=${{ github.workspace }}/install/bin/clang \
+            -DCMAKE_CXX_COMPILER=${{ github.workspace }}/install/bin/clang++ \
+            -DCOMPILER_RT_OS_DIR= \
+            -DCOMPILER_RT_BUILD_BUILTINS=OFF \
+            -DCOMPILER_RT_BUILD_RIPPLE=ON \
+            -DCOMPILER_RT_BUILD_CRT=OFF \
+            -DCOMPILER_RT_BUILD_CTX_PROFILE=OFF \
+            -DCOMPILER_RT_BUILD_GWP_ASAN=OFF \
+            -DCOMPILER_RT_BUILD_LIBFUZZER=OFF \
+            -DCOMPILER_RT_BUILD_MEMPROF=OFF \
+            -DCOMPILER_RT_BUILD_ORC=OFF \
+            -DCOMPILER_RT_BUILD_PROFILE=OFF \
+            -DCOMPILER_RT_BUILD_SANITIZERS=OFF \
+            -DCOMPILER_RT_BUILD_XRAY=OFF \
+            -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
+            -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
+            -DCMAKE_C_COMPILER_TARGET=${{ matrix.targets.triple }} \
+            -DCMAKE_CXX_COMPILER_TARGET=${{ matrix.targets.triple }} \
+            -DCMAKE_CXX_FLAGS="${{ matrix.targets.cxx_flags }}" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=eld" \
+            -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT"
+
+      - name: Build Ripple compiler-rt
+        run: cmake --build build-compiler-rt
+
+      - name: Install Ripple compiler-rt
+        run: cmake --install build-compiler-rt --prefix "$(${{ github.workspace }}/install/bin/clang --print-resource-dir)"
+
+      - name: Remove stale Ripple test-suite build directory
+        run: rm -rf build-ripple-test-suite
+
+      - name: Configure Ripple Test Suite
+        run: |
+          cmake -G Ninja -S ripple-test-suite -B build-ripple-test-suite \
+            -DCMAKE_SYSTEM_NAME=HexagonStandalone \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=${{ github.workspace }}/install/bin/clang++ \
+            -DCMAKE_CXX_FLAGS="-mv81 -std=c++11 -stdlib=libstdc++" \
+            -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT" \
+            -DCMAKE_CROSSCOMPILING_EMULATOR="$CI_CMAKE_CROSSCOMPILING_EMULATOR"
+
+      - name: Build Ripple Test Suite
+        run: cmake --build build-ripple-test-suite
+
+      - name: Run Ripple Test Suite
+        run: cmake --build build-ripple-test-suite --target check -- -k 0
