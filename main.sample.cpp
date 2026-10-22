@@ -28,6 +28,7 @@
 #ifdef __hexagon__
 #ifdef HEXAGON_STANDALONE
 #include <hexagon_standalone.h>
+#include <tlb.h>
 #else
 #include <HAP_compute_res.h>
 #endif
