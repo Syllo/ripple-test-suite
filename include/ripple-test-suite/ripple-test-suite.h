@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <ripple_math.h>
 #include <string>
 #include <vector>
@@ -153,8 +154,17 @@ public:
   void init(int argc, char *argv[]);
   int run();
 
+  // TODO: Rewrite with std::function.
+  struct CreateTestBase {
+    virtual Test *create(TestFramework &) = 0;
+    virtual ~CreateTestBase() {}
+  };
+
   template <typename Test> void addTest(const std::string &TestName) {
-    m_Tests.push_back({TestName, new Test(m_TestFramework)});
+    class CreateTest : public CreateTestBase {
+      Test *create(TestFramework &F) override { return new Test(F); }
+    };
+    m_Tests.push_back({TestName, new CreateTest});
   }
 
   static TestSuite &GetInstance() {
@@ -174,7 +184,7 @@ private:
   TestFramework m_TestFramework;
 
   // TODO: rewrite using unique_ptr.
-  typedef std::pair<std::string, Test *> TestInstance;
+  typedef std::pair<std::string, CreateTestBase *> TestInstance;
   std::vector<TestInstance> m_Tests;
 
   void openOut(const char *);
@@ -186,6 +196,53 @@ template <typename Test> class DefineTest {
 public:
   DefineTest(const std::string &TestName) {
     TestSuite::GetInstance().addTest<Test>(TestName);
+  }
+};
+
+/// Test base for tests that need short-lived, aligned scratch allocations.
+/// On Hexagon the allocations come from the test's VTCM page; elsewhere they
+/// come from aligned heap memory.
+class VTCMTest : public Test {
+#ifdef __hexagon__
+  void *vtcm_ptr;
+#endif
+
+public:
+  VTCMTest(TestFramework &TestFramework)
+      : Test(TestFramework)
+#ifdef __hexagon__
+        ,
+        vtcm_ptr(TestFramework.vtcm())
+#endif
+  {
+  }
+
+  void *alloc(size_t Size, size_t Align) {
+#ifdef __hexagon__
+    char *const end = (char *)F().vtcm() + F().vtcmSize();
+    size_t space = end - (char *)vtcm_ptr;
+    if (!std::align(Align, Size, vtcm_ptr, space)) {
+      std::cerr << "VTCM overflow trying to allocate " << Size
+                << " bytes aligned by " << Align << ", current offset "
+                << (char *)vtcm_ptr - (char *)F().vtcm() << ", total "
+                << F().vtcmSize() << std::endl;
+      abort();
+    }
+    void *ret = vtcm_ptr;
+    vtcm_ptr = (char *)vtcm_ptr + Size;
+    return ret;
+#else
+    return std::aligned_alloc(Align, Size);
+#endif
+  }
+
+  template <typename T> T *alloc(size_t N = 1, size_t Align = alignof(T)) {
+    return (T *)alloc(N * sizeof(T), Align);
+  }
+
+  template <typename T>
+  void alloc(T *&ret, size_t N = 1, size_t Align = alignof(T)) {
+    ret = static_cast<T *>(alloc(sizeof(T) * N, Align));
   }
 };
 

@@ -219,26 +219,29 @@ void TestSuite::init(int argc, char *argv[]) {
 int TestSuite::run() {
   bool result = true;
   for (const auto &i : m_Tests) {
-    auto shouldXfailResult = i.second->xfail();
+    Test *t = i.second->create(m_TestFramework);
+    auto shouldXfailResult = t->xfail();
     if (shouldXfailResult.first) {
       out() << "XFAIL"
             << ": " << i.first << ", REASON: " << shouldXfailResult.second
             << std::endl;
+      delete t;
       continue;
     }
 
-    i.second->prepare(m_repeat);
+    t->prepare(m_repeat);
     unsigned long long dt = 0;
     for (int j = 0; j < m_repeat; ++j) {
       unsigned long long t0 = cycles();
-      i.second->run(j);
+      t->run(j);
       dt = cycles() - t0;
     }
-    bool ret = i.second->verify();
+    bool ret = t->verify();
     if (!ret)
       result = false;
     out() << (ret ? "PASS" : "FAIL") << ": " << i.first << ", " << dt
           << std::endl;
+    delete t;
   }
   return result ? 0 : 1;
 }
