@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <cstddef>
 #include <cstdlib>
 #include <fstream>
@@ -19,6 +20,26 @@
 #include <vector>
 
 namespace ripple_test_suite {
+
+namespace detail {
+
+inline void *align(size_t align, size_t size, void *&ptr, size_t &space) {
+  void *result = nullptr;
+  if (size <= space) {
+    char *begin = static_cast<char *>(ptr);
+    char *aligned = reinterpret_cast<char *>(
+        reinterpret_cast<uintptr_t>(begin + (align - 1)) & -align);
+    size_t padding = static_cast<size_t>(aligned - begin);
+    if (padding <= space - size) {
+      result = aligned;
+      ptr = result;
+      space -= padding;
+    }
+  }
+  return result;
+}
+
+} // namespace detail
 
 class TestFramework;
 
@@ -221,7 +242,7 @@ public:
 #ifdef __hexagon__
     char *const end = (char *)F().vtcm() + F().vtcmSize();
     size_t space = end - (char *)vtcm_ptr;
-    if (!std::align(Align, Size, vtcm_ptr, space)) {
+    if (!detail::align(Align, Size, vtcm_ptr, space)) {
       std::cerr << "VTCM overflow trying to allocate " << Size
                 << " bytes aligned by " << Align << ", current offset "
                 << (char *)vtcm_ptr - (char *)F().vtcm() << ", total "
