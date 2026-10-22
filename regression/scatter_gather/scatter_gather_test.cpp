@@ -51,25 +51,29 @@ template <typename T> union TypedVector {
 
 using namespace ripple_test_suite;
 
-template <typename T, typename IT> class TestBase : public Test {
+template <typename T, typename IT> class TestBase : public VTCMTest {
 protected:
   const size_t SparseLen;
   const size_t DenseLen;
   const size_t DenseAllocLen;
 
-  TypedVector<T> *Sparse;   // SparseLen
-  TypedVector<T> *Dense;    // DenseLen
-  TypedVector<IT> *Indexes; // DenseLen
+  TypedVector<T> *const Sparse;   // SparseLen
+  TypedVector<T> *const Dense;    // DenseLen
+  TypedVector<IT> *const Indexes; // DenseLen
 
 public:
   TestBase(TestFramework &TestFramework, size_t DenseLen, size_t SparseLen)
-      : Test(TestFramework),
+      : VTCMTest(TestFramework),
         SparseLen(
             std::min(SparseLen, (size_t)std::numeric_limits<IT>::max() + 1)),
         DenseLen(DenseLen),
         DenseAllocLen((DenseLen + sizeof(HVX_Vector) / sizeof(T) - 1) &
-                      ~(sizeof(HVX_Vector) / sizeof(T) - 1)) {
+                      ~(sizeof(HVX_Vector) / sizeof(T) - 1)),
+        Sparse((TypedVector<T> *)alloc<T>(SparseLen, alignof(HVX_Vector))),
+        Dense((TypedVector<T> *)alloc<T>(DenseAllocLen, alignof(HVX_Vector))),
+        Indexes((TypedVector<IT> *)alloc<IT>(DenseLen, alignof(HVX_Vector))) {
     assert(DenseLen < SparseLen);
+    generateIndexes(DenseLen, Indexes->s);
   }
   void generateIndexes(size_t N, IT *X) {
     // Generate a random permutation.
@@ -79,20 +83,6 @@ public:
     for (size_t i = SparseLen - 1; i != 0; --i)
       std::swap(t[i], t[size_t(randn() * (i + 1))]);
     std::copy(t.begin(), t.begin() + N, X);
-  }
-  void prepareCommon() {
-    char *vtcmBase = (char *)F().vtcm();
-    char *p = vtcmBase;
-    Sparse = (TypedVector<T> *)p;
-    p += SparseLen * sizeof(T);
-    Dense = (TypedVector<T> *)p;
-    p += DenseAllocLen * sizeof(T);
-    Indexes = (TypedVector<IT> *)p;
-    p += DenseLen * sizeof(IT);
-    if (p > vtcmBase + F().vtcmSize())
-      std::cerr << "VTCM overflow, available " << F().vtcmSize() << ", need "
-                << p - vtcmBase << " bytes." << std::endl;
-    generateIndexes(DenseLen, Indexes->s);
   }
 };
 
@@ -113,7 +103,6 @@ class GatherTestBase : public TestBase<T, IT> {
 public:
   GatherTestBase(TestFramework &TF) : TestBase<T, IT>(TF, N, ::SparseLen) {}
   void prepare(unsigned NumIterations) override {
-    TestBase<T, IT>::prepareCommon();
     for (size_t i = 0; i != SparseLen; ++i)
       Sparse->s[i] = i;
     for (size_t i = 0; i != DenseAllocLen; ++i)
@@ -150,7 +139,6 @@ class ScatterTestBase : public TestBase<T, IT> {
 public:
   ScatterTestBase(TestFramework &TF) : TestBase<T, IT>(TF, N, ::SparseLen) {}
   void prepare(unsigned NumIterations) override {
-    TestBase<T, IT>::prepareCommon();
     for (size_t i = 0; i != SparseLen; ++i)
       Sparse->s[i] = -1;
     for (size_t i = 0; i != DenseAllocLen; ++i)
