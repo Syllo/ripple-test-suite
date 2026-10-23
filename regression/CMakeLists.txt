@@ -1,10 +1,18 @@
-add_test_app(regressions
+set(REGRESSION_SOURCES
   arithmetic.cpp
   reductions.cpp
   rsqrt.cpp
   bf16_mult.cpp
   "../main.sample.cpp"
   )
+
+# The Hexagon backend cannot yet legalize the 256-lane predicate operations in
+# the Ripple bitonic sort across multiple HVX vectors.
+if(NOT ${BUILD_TARGET} STREQUAL "Hexagon")
+  list(APPEND REGRESSION_SOURCES topk.cpp)
+endif()
+
+add_test_app(regressions ${REGRESSION_SOURCES})
 
 target_compile_options(regressions PRIVATE -fenable-ripple)
 target_include_directories(regressions PRIVATE ${RIPPLE_TEST_SUITE_INCLUDE_DIR})
