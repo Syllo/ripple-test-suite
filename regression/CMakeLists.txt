@@ -1,6 +1,7 @@
 add_test_app(regressions
   arithmetic.cpp
   reductions.cpp
+  rsqrt.cpp
   "../main.sample.cpp"
   )
 
