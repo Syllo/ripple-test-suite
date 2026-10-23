@@ -2,6 +2,7 @@ add_test_app(regressions
   arithmetic.cpp
   reductions.cpp
   rsqrt.cpp
+  bf16_mult.cpp
   "../main.sample.cpp"
   )
 
