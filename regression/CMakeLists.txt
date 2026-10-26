@@ -14,6 +14,8 @@ endif()
 
 add_test_app(regressions ${REGRESSION_SOURCES})
 
+add_subdirectory(vectorkernels)
+
 target_compile_options(regressions PRIVATE -fenable-ripple)
 target_include_directories(regressions PRIVATE ${RIPPLE_TEST_SUITE_INCLUDE_DIR})
 
