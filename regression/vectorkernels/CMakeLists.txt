@@ -4,6 +4,7 @@ add_test_app(vectorkernels
   cholesky.cpp
   conv.cpp
   biquad.cpp
+  biquad_scratchpad.cpp
   cpy.cpp
   dax.cpp
   limiter.cpp
