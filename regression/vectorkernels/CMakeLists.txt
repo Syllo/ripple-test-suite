@@ -14,6 +14,7 @@ add_test_app(vectorkernels
   strided_load.cpp
   sub.cpp
   sum.cpp
+  swish.cpp
   vabsdiff.cpp
   vmax.cpp
   vselect.cpp
