@@ -2,6 +2,7 @@ add_test_app(vectorkernels
   "../../main.sample.cpp"
   conv1d.cpp
   cholesky.cpp
+  conv.cpp
   cpy.cpp
   dax.cpp
   limiter.cpp
