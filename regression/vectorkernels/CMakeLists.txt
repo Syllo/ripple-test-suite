@@ -7,6 +7,7 @@ add_test_app(vectorkernels
   biquad_scratchpad.cpp
   cpy.cpp
   dax.cpp
+  intlfir.cpp
   limiter.cpp
   matmul.cpp
   mul.cpp
