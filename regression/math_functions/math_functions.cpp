@@ -62,7 +62,9 @@ template void Ripple_unary_math<float, floorf_fn>(size_t, float *,
 template void Ripple_unary_math<float, ceilf_fn>(size_t, float *,
                                                  const float *);
 
-// _Float16 unary
+// FIXME: Re-enable with the FP16 tests once scalar FP16 math entry points are
+// available from the Hexagon runtime.
+#if 0
 template void Ripple_unary_math<_Float16, sinf16_fn>(size_t, _Float16 *,
                                                      const _Float16 *);
 template void Ripple_unary_math<_Float16, cosf16_fn>(size_t, _Float16 *,
@@ -97,6 +99,7 @@ template void Ripple_unary_math<_Float16, floorf16_fn>(size_t, _Float16 *,
                                                        const _Float16 *);
 template void Ripple_unary_math<_Float16, ceilf16_fn>(size_t, _Float16 *,
                                                       const _Float16 *);
+#endif
 
 // float binary
 template void Ripple_binary_math<float, powf_fn>(size_t, float *, const float *,
@@ -105,10 +108,11 @@ template void Ripple_binary_math<float, hypotf_fn>(size_t, float *,
                                                    const float *,
                                                    const float *);
 
-// _Float16 binary
+#if 0
 template void Ripple_binary_math<_Float16, powf16_fn>(size_t, _Float16 *,
                                                       const _Float16 *,
                                                       const _Float16 *);
 template void Ripple_binary_math<_Float16, hypotf16_fn>(size_t, _Float16 *,
                                                         const _Float16 *,
                                                         const _Float16 *);
+#endif
