@@ -10,7 +10,6 @@
 #pragma once
 
 #include <cstdlib>
-#include <ripple/HVX_MathLib.h>
 #include <ripple_math.h>
 
 template <typename T, T (*OP)(T)>
@@ -45,9 +44,17 @@ inline float powf_fn(float x, float y) { return powf(x, y); }
 
 inline float sqrtf_fn(float x) { return sqrtf(x); }
 
+#if defined(__hexagon__) && defined(__HVX__)
 inline float rsqrtf_fn(float x) { return rsqrtf(x); }
+#else
+inline float rsqrtf_fn(float x) { return 1.0f / sqrtf(x); }
+#endif
 
+#if defined(__hexagon__) && defined(__HVX__)
 inline float hypotf_fn(float x, float y) { return hypotf(x, y); }
+#else
+inline float hypotf_fn(float x, float y) { return __builtin_hypotf(x, y); }
+#endif
 
 inline float truncf_fn(float x) { return truncf(x); }
 

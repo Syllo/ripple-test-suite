@@ -9,9 +9,11 @@
 
 #include <cmath>
 
+#ifdef __hexagon__
 // Hexagon's math library does not provide the scalar rsqrtf entry point used
 // by the Ripple vector candidate. Keep a weak scalar fallback for the loop
 // remainder while allowing a target runtime implementation to take precedence.
 extern "C" __attribute__((weak)) float rsqrtf(float x) {
   return 1.0f / std::sqrt(x);
 }
+#endif
