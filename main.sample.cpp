@@ -221,15 +221,16 @@ int TestSuite::run() {
   bool result = true;
   for (const auto &i : m_Tests) {
     Test *t = i.second->create(m_TestFramework);
-    auto shouldXfailResult = t->xfail();
-    if (shouldXfailResult.first) {
-      out() << "XFAIL"
-            << ": " << i.first << ", REASON: " << shouldXfailResult.second
+    auto shouldSkipResult = t->skip();
+    if (shouldSkipResult.first) {
+      out() << "SKIP"
+            << ": " << i.first << ", REASON: " << shouldSkipResult.second
             << std::endl;
       delete t;
       continue;
     }
 
+    auto shouldXfailResult = t->xfail();
     t->prepare(m_repeat);
     unsigned long long dt = 0;
     for (int j = 0; j < m_repeat; ++j) {
@@ -238,10 +239,17 @@ int TestSuite::run() {
       dt = cycles() - t0;
     }
     bool ret = t->verify();
-    if (!ret)
-      result = false;
-    out() << (ret ? "PASS" : "FAIL") << ": " << i.first << ", " << dt
-          << std::endl;
+    if (shouldXfailResult.first) {
+      if (ret)
+        result = false;
+      out() << (ret ? "XPASS" : "XFAIL") << ": " << i.first
+            << ", REASON: " << shouldXfailResult.second << std::endl;
+    } else {
+      if (!ret)
+        result = false;
+      out() << (ret ? "PASS" : "FAIL") << ": " << i.first << ", " << dt
+            << std::endl;
+    }
     delete t;
   }
   return result ? 0 : 1;

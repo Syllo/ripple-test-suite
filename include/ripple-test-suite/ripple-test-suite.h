@@ -52,10 +52,16 @@ public:
   TestFramework &F() const { return m_TestFramework; }
 
   /**
-   * @brief Returns {true, "<REASON-FOR-XFAIL>"} if the test must be XFAIL-ed.
-   * Else returns {false, ""}.
+   * @brief Returns {true, "<REASON-FOR-XFAIL>"} if the test is expected to
+   * fail. Expected failures are executed and must fail verification.
    */
   virtual std::pair<bool, std::string> xfail() const { return {false, ""}; }
+
+  /**
+   * @brief Returns {true, "<REASON-FOR-SKIP>"} if the test must not run.
+   */
+  virtual std::pair<bool, std::string> skip() const { return {false, ""}; }
+
   virtual void prepare(unsigned NumIterations) {}
   virtual void run(unsigned Iteration) = 0;
   virtual bool verify() const = 0;

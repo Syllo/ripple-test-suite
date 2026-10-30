@@ -63,7 +63,7 @@ class GemmI8Test : public Test {
   int32_t clamp_min, clamp_max, zero_point;
 
 public:
-  std::pair<bool, std::string> xfail() const override {
+  std::pair<bool, std::string> skip() const override {
     return {!verify_ripple_sme_api_fixed_vscale(),
             "Runtime VL different than Ripple's fixed assumption."};
   }

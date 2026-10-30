@@ -61,15 +61,6 @@ public:
     scalar_valid_convolution(&Reference[0], &Input[0], &Kernel[0]);
   }
 
-#ifdef __hexagon__
-  // The upstream Hexagon backend miscompiles this padded floating-point
-  // reduction. The downstream Hexagon compiler already contains a fix.
-  std::pair<bool, std::string> xfail() const override {
-    return {SigDigits == 4,
-            "Upstream Hexagon backend miscompiles the padded float reduction."};
-  }
-#endif
-
   void run(unsigned) override {
     conv1d_ripple(&Output[0], &Input[0], &Kernel[0]);
   }
