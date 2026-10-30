@@ -134,14 +134,6 @@ public:
     fp16_rsqrt_reference(N, X, YRef);
   }
 
-#ifdef __hexagon__
-  // The Hexagon backend currently drops the upper 32 lanes while lowering the
-  // 64-lane FP16-to-FP32 computation.
-  std::pair<bool, std::string> xfail() const override {
-    return {KT == Ripple, "Hexagon backend drops the upper 32 result lanes."};
-  }
-#endif
-
   void run(unsigned) override {
     if (KT == Reference)
       fp16_rsqrt_reference(N, X, Y);

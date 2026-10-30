@@ -135,7 +135,7 @@ public:
   }
 
   std::pair<bool, std::string> xfail() const override {
-    return {true, "dense_layer fails on Hexagon and x86 (See QSTREAM-1655)."};
+    return {true, "dense_layer fails on all targets (See QSTREAM-1655)."};
   }
 
   bool verify() const override { return equal(2e-5, Y, YRef); }
