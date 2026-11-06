@@ -241,14 +241,11 @@ public:
 
   std::pair<bool, std::string> xfail() const override {
 #ifdef __hexagon__
-    if (REF_OP == logf_fn)
-      return {true, "The Hexagon HVX logf implementation does not return "
-                    "-infinity for zero inputs."};
-    return {true, "The Hexagon HVX rsqrtf implementation does not return "
-                  "signed infinities for zero inputs."};
-#else
-    return {false, ""};
+    if (REF_OP == rsqrt_ref<float>)
+      return {true, "The Hexagon HVX rsqrtf implementation does not return "
+                    "signed infinities for zero inputs."};
 #endif
+    return {false, ""};
   }
 
   void prepare(unsigned) override {
