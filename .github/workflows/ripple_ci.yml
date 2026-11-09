@@ -133,16 +133,19 @@ jobs:
 
   hexagon_build_and_test:
     if: github.repository_owner == 'qualcomm'
-    name: Build and test (Hexagon)
+    name: Build and test (Hexagon ${{ matrix.arch_version }})
     runs-on: [self-hosted, ripple-ci]
     timeout-minutes: 90
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
+        # SDK 6.7.0.0 (Tools 21.0.04) provides only non-HVX v83 models.
+        # v85 models have HVX/VTCM; compiler support is in upstream LLVM main,
+        # and is absent from this LLVM 23 release branch. See README.md.
+        arch_version: [v68, v69, v75, v79, v81]
         targets:
           - arch: Hexagon
             triple: hexagon-unknown-unknown-elf
-            arch_version: v81
             cxx_flags: -stdlib=libc++ -D_USE_GENERIC_XLOCALE_SHIMS -D_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE -D_C99 -D_C_AS_CPP -D_HAS_GENERIC_TEMPLATES=0
             sdk: qualcomm-community-edition
 
@@ -211,8 +214,8 @@ jobs:
           fi
           echo "HEXAGON_SDK_ROOT=$HEXAGON_SDK_ROOT" >> "$GITHUB_ENV"
           echo "HEXAGON_TOOLS_ROOT=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools" >> "$GITHUB_ENV"
-          echo "HEXAGON_ARCH_VERSION=${{ matrix.targets.arch_version }}" >> "$GITHUB_ENV"
-          echo "CI_CMAKE_CROSSCOMPILING_EMULATOR=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-sim;--simulated_returnval;--" >> "$GITHUB_ENV"
+          echo "HEXAGON_ARCH_VERSION=${{ matrix.arch_version }}" >> "$GITHUB_ENV"
+          echo "CI_CMAKE_CROSSCOMPILING_EMULATOR=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-sim;--m${{ matrix.arch_version }};--simulated_returnval;--" >> "$GITHUB_ENV"
           echo "CI_HEXAGON_SYSROOT=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools/target/hexagon" >> "$GITHUB_ENV"
 
       - name: Fail on unknown SDK
@@ -265,7 +268,8 @@ jobs:
             -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
             -DCMAKE_C_COMPILER_TARGET=${{ matrix.targets.triple }} \
             -DCMAKE_CXX_COMPILER_TARGET=${{ matrix.targets.triple }} \
-            -DCMAKE_CXX_FLAGS="${{ matrix.targets.cxx_flags }}" \
+            -DCMAKE_C_FLAGS="-m${{ matrix.arch_version }}" \
+            -DCMAKE_CXX_FLAGS="-m${{ matrix.arch_version }} ${{ matrix.targets.cxx_flags }}" \
             -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=eld" \
             -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT"
 
@@ -284,7 +288,7 @@ jobs:
             -DCMAKE_SYSTEM_NAME=HexagonStandalone \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_COMPILER=${{ github.workspace }}/install/bin/clang++ \
-            -DCMAKE_CXX_FLAGS="-mv81 -std=c++11 -stdlib=libstdc++" \
+            -DCMAKE_CXX_FLAGS="-m${{ matrix.arch_version }} -mhvx -mhvx-length=128B -std=c++11 -stdlib=libstdc++" \
             -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT" \
             -DCMAKE_CROSSCOMPILING_EMULATOR="$CI_CMAKE_CROSSCOMPILING_EMULATOR"
 
