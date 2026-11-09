@@ -62,9 +62,7 @@ template void Ripple_unary_math<float, floorf_fn>(size_t, float *,
 template void Ripple_unary_math<float, ceilf_fn>(size_t, float *,
                                                  const float *);
 
-// FIXME: Re-enable with the FP16 tests once scalar FP16 math entry points are
-// available from the Hexagon runtime.
-#if 0
+#if __has_Float16__
 template void Ripple_unary_math<_Float16, sinf16_fn>(size_t, _Float16 *,
                                                      const _Float16 *);
 template void Ripple_unary_math<_Float16, cosf16_fn>(size_t, _Float16 *,
@@ -108,11 +106,52 @@ template void Ripple_binary_math<float, hypotf_fn>(size_t, float *,
                                                    const float *,
                                                    const float *);
 
-#if 0
+#if __has_Float16__
 template void Ripple_binary_math<_Float16, powf16_fn>(size_t, _Float16 *,
                                                       const _Float16 *,
                                                       const _Float16 *);
 template void Ripple_binary_math<_Float16, hypotf16_fn>(size_t, _Float16 *,
                                                         const _Float16 *,
                                                         const _Float16 *);
+#endif
+
+#if __has_bf16__
+template void Ripple_unary_math<__bf16, sinbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, cosbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, tanbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, asinbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, acosbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, atanbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, sinhbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, coshbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, tanhbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, expbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, logbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, sqrtbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, rsqrtbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, truncbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, roundbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, floorbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_unary_math<__bf16, ceilbf16_fn>(
+    size_t, __bf16 *, const __bf16 *);
+template void Ripple_binary_math<__bf16, powbf16_fn>(
+    size_t, __bf16 *, const __bf16 *, const __bf16 *);
+template void Ripple_binary_math<__bf16, hypotbf16_fn>(
+    size_t, __bf16 *, const __bf16 *, const __bf16 *);
 #endif

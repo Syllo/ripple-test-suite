@@ -9,7 +9,7 @@
 
 #include <ripple.h>
 
-#if __has_bf16__
+#if __has_bf16__ || __has_Float16__
 #include <cmath>
 #include <stddef.h>
 #include <stdint.h>
@@ -68,6 +68,7 @@ class FlatMultTest : public Test {
     }
   }
 
+#if __has_bf16__
   bool verify_for(const __bf16 *out, const __bf16 *out_ref) const {
     for (int i = 0; i < N; ++i) {
       const float actual = static_cast<float>(out[i]);
@@ -77,9 +78,12 @@ class FlatMultTest : public Test {
     }
     return true;
   }
+#endif
+#if __has_Float16__
   bool verify_for(const _Float16 *out, const _Float16 *out_ref) const {
     return isclose(N, out, out_ref, pow(0.1, SigDigits));
   }
+#endif
 
 public:
   FlatMultTest(TestFramework &TestFramework) : Test(TestFramework) {
@@ -107,11 +111,15 @@ public:
   }
 };
 
+#if __has_bf16__
 DefineTest<FlatMultTest<Reference, __bf16, 1>> Bf16RefMul("Multiply<ref,bf16>");
 DefineTest<FlatMultTest<Ripple, __bf16, 1>>
     Bf16RippleMul("Multiply<ripple,bf16>");
+#endif
+#if __has_Float16__
 DefineTest<FlatMultTest<Reference, _Float16, 3>>
     FP16RefMul("Multiply<ref,fp16>");
 DefineTest<FlatMultTest<Ripple, _Float16, 3>>
     FP16RippleMul("Multiply<ripple,fp16>");
-#endif // __has_bf16__
+#endif
+#endif // __has_bf16__ || __has_Float16__
