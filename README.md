@@ -79,7 +79,45 @@ In the above build script, we use hexagon libstdc++ to build a Hexagon standalon
 
 Use Hexagon v81 for combined fp16/bf16 coverage. The Ripple compiler enables
 `_Float16` from v68 and `__bf16` from v81; its HVX bf16 vector types also require
-v81 and 128-byte vectors. The CI configuration uses this baseline.
+v81 and 128-byte vectors. CI builds and runs separate v68, v69, v75, v79, and v81
+configurations with 128-byte HVX vectors. v68 covers the first fp16 target, and
+v75 covers hardware before the v79 transition away from IEEE HVX operations.
+The `__has_bf16__` guards exclude bf16 tests before v81; fp16 tests remain
+enabled. Both compiler-rt and the test suite use the selected architecture, and
+the simulator is passed that version explicitly.
+
+v67 covers a target without `_Float16`. With the LLVM FP16 type and HVX math
+header guards, the v67 math sources pass compiler-only syntax checks. Runtime
+coverage is deferred because the installed Hexagon SDK 6.7.0.0 (Hexagon Tools
+21.0.04) supports only v68 and later. v67 therefore remains outside the CI
+execution matrix; its numerical behavior has not been tested.
+
+v83 is excluded from HVX coverage because Hexagon SDK 6.7.0.0 (Hexagon Tools
+21.0.04) exposes no v83 simulator variant with an HVX coprocessor: all ten
+listed models are marked `COPROC N`.
+Native v83 probes built with the SDK compiler fail HVX acquisition on all ten
+listed models. The Ripple compiler on this release branch also rejects `-mv83`.
+
+HVX is an
+[optional coprocessor](https://docs.qualcomm.com/doc/80-N2040-61/topic/introduction.html)
+with its own vector register file and compute resources; its availability
+depends on the particular core implementation. Qualcomm publishes a
+[v83 HVX reference manual](https://docs.qualcomm.com/doc/80-N3040-23/topic/index_80-n2040-70_v83_hvx_prm.html).
+The coverage limitation applies to this SDK's simulator models; upstream LLVM
+main defines v83 CPU and HVX support.
+
+The same SDK provides v85 models with HVX/VTCM: `v85qa_1`, `v85dm_2`,
+`v85na_1`, and `v85nb_1`. Native SDK probes pass HVX acquisition in 128-byte
+mode and VTCM setup on all four. v85 coverage is deferred because this Ripple
+LLVM 23 release branch lacks v85 target support; it rejects both `-mv85` and
+`-mcpu=hexagonv85`. The full math suite has not been tested on v85.
+
+Upstream LLVM main (LLVM 24 development) already defines the
+[`hexagonv85` CPU and `hvxv85` feature](https://github.com/llvm/llvm-project/blob/main/llvm/lib/Target/Hexagon/Hexagon.td),
+with [Clang target support](https://github.com/llvm/llvm-project/blob/main/clang/lib/Basic/Targets/Hexagon.cpp).
+These definitions are absent from upstream `release/23.x` and the Ripple
+release branch used here. Enabling v85 CI requires bringing that compiler
+support into this branch before validating the Ripple test suite on v85.
 
 ### Hexagon with Community Hexagon SDK (on device)
 
