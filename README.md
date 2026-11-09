@@ -34,6 +34,10 @@ $ cmake --build . -t check
 
 Using clang builtins (`-rtlib=compiler-rt` and  `-lunwind`) is needed for bfloat16 tests.
 
+Native bf16 math tests require a Ripple compiler with bf16 builtin dispatch and
+math intrinsic lookup support. They need no additional x86 CPU flag; the
+AArch64 configuration below uses `-march=armv9.2-a`.
+
 ### AArch64 (cross-compiling, using clang)
 
 Setting `CMAKE_SYSTEM_NAME` is necessary for cmake to detect cross-compilation.
@@ -72,6 +76,10 @@ $ cmake --build . -t check
 ```
 
 In the above build script, we use hexagon libstdc++ to build a Hexagon standalone binary (without QuRT).
+
+Use Hexagon v81 for combined fp16/bf16 coverage. The Ripple compiler enables
+`_Float16` from v68 and `__bf16` from v81; its HVX bf16 vector types also require
+v81 and 128-byte vectors. The CI configuration uses this baseline.
 
 ### Hexagon with Community Hexagon SDK (on device)
 
