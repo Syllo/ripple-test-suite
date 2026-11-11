@@ -133,7 +133,7 @@ jobs:
 
   hexagon_build_and_test:
     if: github.repository_owner == 'qualcomm'
-    name: Build and test (Hexagon ${{ matrix.arch_version }})
+    name: Build and test (Hexagon ${{ matrix.arch_version }}, ${{ matrix.fp_mode.name }})
     runs-on: [self-hosted, ripple-ci]
     timeout-minutes: 90
     strategy:
@@ -142,7 +142,22 @@ jobs:
         # SDK 6.7.0.0 (Tools 21.0.04) provides only non-HVX v83 models.
         # v85 models have HVX/VTCM; compiler support is in upstream LLVM main,
         # and is absent from this LLVM 23 release branch. See README.md.
-        arch_version: [v68, v69, v75, v79, v81]
+        arch_version: [v68, v69, v73, v75, v79, v81]
+        fp_mode:
+          - name: default
+            cxx_flags: ""
+          - name: ieee
+            cxx_flags: -mhvx-ieee-fp
+        # Exercise hardware IEEE mode on the legacy QFloat architectures.
+        exclude:
+          - arch_version: v79
+            fp_mode:
+              name: ieee
+              cxx_flags: -mhvx-ieee-fp
+          - arch_version: v81
+            fp_mode:
+              name: ieee
+              cxx_flags: -mhvx-ieee-fp
         targets:
           - arch: Hexagon
             triple: hexagon-unknown-unknown-elf
@@ -288,7 +303,7 @@ jobs:
             -DCMAKE_SYSTEM_NAME=HexagonStandalone \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_COMPILER=${{ github.workspace }}/install/bin/clang++ \
-            -DCMAKE_CXX_FLAGS="-m${{ matrix.arch_version }} -mhvx -mhvx-length=128B -std=c++11 -stdlib=libstdc++" \
+            -DCMAKE_CXX_FLAGS="-m${{ matrix.arch_version }} -mhvx -mhvx-length=128B ${{ matrix.fp_mode.cxx_flags }} -std=c++11 -stdlib=libstdc++" \
             -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT" \
             -DCMAKE_CROSSCOMPILING_EMULATOR="$CI_CMAKE_CROSSCOMPILING_EMULATOR"
 

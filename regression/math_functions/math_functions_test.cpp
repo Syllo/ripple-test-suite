@@ -283,14 +283,18 @@ public:
 
   std::pair<bool, std::string> xfail() const override {
 #ifdef __hexagon__
-#if __HEXAGON_ARCH__ == 68 || __HEXAGON_ARCH__ == 69 || __HEXAGON_ARCH__ == 75
+#if defined(__HVX__) && !defined(__HVX_IEEE_FP__) && \
+    (__HEXAGON_ARCH__ == 68 || __HEXAGON_ARCH__ == 69 || \
+     __HEXAGON_ARCH__ == 73 || __HEXAGON_ARCH__ == 75)
     // log(0) correctly selects -infinity, then multiplies by ln(2) to convert
-    // log2 to natural log. On v68/v69/v75, legacy QFloat multiplication turns
-    // that infinity into a finite value (-45472 for FP16). Special values
+    // log2 to natural log. On v68/v69/v73/v75, legacy QFloat multiplication
+    // turns that infinity into a finite value (-45472 for FP16). Special values
     // need to bypass scaling or be applied afterward; this is not rounding.
+    // IEEE mode (-mhvx-ieee-fp) preserves infinity on these architectures.
     if (REF_OP == logf_fn)
-      return {true, "Legacy Hexagon v68/v69/v75 QFloat scaling does not "
-                    "preserve negative infinity for log of zero."};
+      return {true, "Legacy Hexagon HVX QFloat scaling does not preserve "
+                    "negative infinity for log of zero; passes with "
+                    "-mhvx-ieee-fp."};
 #endif
     if (REF_OP == rsqrt_ref<float>)
       return {true, "The Hexagon HVX reciprocal square root implementation "
@@ -327,12 +331,13 @@ public:
   std::pair<bool, std::string> xfail() const override {
 #ifdef __hexagon__
 #if (__HEXAGON_ARCH__ == 68 || __HEXAGON_ARCH__ == 69 || \
-     __HEXAGON_ARCH__ == 75) && __has_Float16__
+     __HEXAGON_ARCH__ == 73 || __HEXAGON_ARCH__ == 75) && __has_Float16__
     // pow uses exp(b * log(a)) without handling negative bases or checking
     // whether b is an integer; its fast log maps negative a to -infinity.
     // For pow(-1, -0.5), v79+ preserves that infinity and returns +infinity
-    // instead of NaN. On v68/v69/v75, QFloat converts it to a finite value and
-    // the exp path produces NaN accidentally, so these FP16 domain cases pass.
+    // instead of NaN. On v68/v69/v73/v75, QFloat converts it to a finite value
+    // and the exp path produces NaN accidentally, so these FP16 domain cases
+    // pass.
 
     // Negative bases with integer exponents remain broken: pow(-4, 2) and
     // pow(-4, 3) return NaN instead of 16 and -64 on all tested architectures.
