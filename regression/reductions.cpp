@@ -9,10 +9,13 @@
 
 // TODO: Must be included before ripple_math.h.
 #include <ripple-test-suite/ripple-test-suite.h>
+#include <ripple-test-suite/floating-point-limits.h>
 
 #include <limits>
 #include <ripple.h>
 #include <ripple_math.h>
+
+using ripple_test_suite::FloatLimits;
 
 enum ReduceOp { ADD, MIN, MAX };
 
@@ -226,8 +229,8 @@ template <typename T, unsigned BK> class ReduceAddOverflowTest : public Test {
 public:
   ReduceAddOverflowTest(TestFramework &TF) : Test(TF) {
     for (unsigned i = 0; i < N; ++i) {
-      const T Max = std::numeric_limits<T>::max();
-      const T Inf = std::numeric_limits<T>::infinity();
+      const T Max = FloatLimits<T>::max();
+      const T Inf = FloatLimits<T>::infinity();
       for (unsigned k = 0; k < K; ++k)
         X[i][k] = i ? -Max : Max;
       Expected[i] = i ? -Inf : Inf;
@@ -241,6 +244,11 @@ public:
     if (__is_same(T, float))
       return {true, "Legacy Hexagon QFloat addition returns NaN instead of "
                     "signed infinity on FP32 reduction overflow."};
+#if __has_Float16__
+    if (__is_same(T, _Float16))
+      return {true, "Legacy Hexagon QFloat addition returns NaN instead of "
+                    "signed infinity on FP16 reduction overflow."};
+#endif
 #endif
     return {false, ""};
   }
@@ -305,6 +313,11 @@ DefineTest<ReduceAddOverflowTest<float, 32>>
 DefineTest<ReduceAddOverflowTest<double, 8>>
     TF64ReduceAddOverflow("ReduceTest1D<+,f64,overflow>");
 
+#if __has_Float16__
+DefineTest<ReduceAddOverflowTest<_Float16, 64>>
+    TF16ReduceAddOverflow("ReduceTest1D<+,f16,overflow>");
+#endif
+
 DefineTest<Reduce1DTest<float, ReduceOp::MAX, 10, 32>>
     TF32ReduceMax1D("ReduceTest1D<max,f32>");
 DefineTest<Reduce2DTest<float, ReduceOp::MAX, 10, 4, 8>>
@@ -326,6 +339,8 @@ DefineTest<Reduce2DTest<double, ReduceOp::MIN, 10, 4, 8>>
 // aarch64 does not lower bf16 masked stores, see
 // https://github.com/llvm/llvm-project/issues/201149.
 #if __has_bf16__ && !defined __aarch64__
+DefineTest<ReduceAddOverflowTest<__bf16, 32>>
+    TBF16ReduceAddOverflow("ReduceTest1D<+,bf16,overflow>");
 DefineTest<Reduce1DTest<__bf16, ReduceOp::ADD, 2, 32>>
     TBF16ReduceAdd1D("ReduceTest1D<+,bf16>");
 DefineTest<Reduce2DTest<__bf16, ReduceOp::ADD, 2, 4, 8>>

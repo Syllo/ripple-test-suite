@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <ripple-test-suite/ripple-test-suite.h>
+#include <ripple-test-suite/floating-point-limits.h>
 
 #include <ripple.h>
 #include <ripple_math.h>
@@ -164,8 +165,8 @@ public:
   AddOverflowTest(TestFramework &TF)
       : Test(TF), X(N), Y(N), Output(N), Expected(N) {
     for (size_t i = 0; i < N; ++i) {
-      const T Max = std::numeric_limits<T>::max();
-      const T Inf = std::numeric_limits<T>::infinity();
+      const T Max = FloatLimits<T>::max();
+      const T Inf = FloatLimits<T>::infinity();
       X[i] = Y[i] = i % 2 ? -Max : Max;
       Expected[i] = i % 2 ? -Inf : Inf;
     }
@@ -178,6 +179,11 @@ public:
     if (__is_same(T, float))
       return {true, "Legacy Hexagon QFloat addition returns NaN instead of "
                     "signed infinity on FP32 overflow."};
+#if __has_Float16__
+    if (__is_same(T, _Float16))
+      return {true, "Legacy Hexagon QFloat addition returns NaN instead of "
+                    "signed infinity on FP16 overflow."};
+#endif
 #endif
     return {false, ""};
   }
@@ -213,6 +219,14 @@ DefineTest<OpTest<double, Op::MULT, 6>> TF64Mult("OpTest<*,f64>");
 DefineTest<AddCancellationTest> TF32AddCancellation("OpTest<+,f32,cancellation>");
 DefineTest<AddOverflowTest<float>> TF32AddOverflow("OpTest<+,f32,overflow>");
 DefineTest<AddOverflowTest<double>> TF64AddOverflow("OpTest<+,f64,overflow>");
+
+#if __has_Float16__
+DefineTest<AddOverflowTest<_Float16>> TF16AddOverflow("OpTest<+,f16,overflow>");
+#endif
+
+#if __has_bf16__
+DefineTest<AddOverflowTest<__bf16>> TBF16AddOverflow("OpTest<+,bf16,overflow>");
+#endif
 
 #ifdef __hexagon__
 // TODO: Fix this for x86.
