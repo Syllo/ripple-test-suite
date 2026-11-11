@@ -76,6 +76,10 @@ public:
     Loss = categorical_cross_entropy_loss(N, Yref, Ypred);
   }
 
+  std::pair<bool, std::string> xfail() const override {
+    return xfailHexagonV81IEEEFP32<float>();
+  }
+
   bool verify() const override { return equal(1e-5, Loss, LossRef); }
 };
 

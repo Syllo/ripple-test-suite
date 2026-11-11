@@ -202,6 +202,31 @@ class RippleUnaryMathTest : public TestBase<T> {
 public:
   RippleUnaryMathTest(TestFramework &TF) : TestBase<T>(TF, N) {}
 
+  std::pair<bool, std::string> xfail() const override {
+#if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
+    __HEXAGON_ARCH__ == 81
+    bool UsesFP32 = __is_same(T, float);
+#if __has_bf16__
+    UsesFP32 |= __is_same(T, __bf16);
+#endif
+    if (UsesFP32 &&
+        (REF_OP == sinf_fn || REF_OP == cosf_fn || REF_OP == tanf_fn ||
+         REF_OP == asinf_fn || REF_OP == acosf_fn || REF_OP == atanf_fn ||
+         REF_OP == sinhf_fn || REF_OP == coshf_fn || REF_OP == expf_fn ||
+         REF_OP == logf_fn || REF_OP == sqrtf_fn))
+      return {true, "Hexagon v81 IEEE-mode vector math produces incorrect "
+                    "FP32/BF16 results."};
+#if __has_Float16__
+    if (__is_same(T, _Float16) &&
+        (REF_OP == sinf_fn || REF_OP == cosf_fn || REF_OP == tanf_fn ||
+         REF_OP == logf_fn))
+      return {true, "Hexagon v81 IEEE-mode vector math produces incorrect "
+                    "FP16 results."};
+#endif
+#endif
+    return {false, ""};
+  }
+
   void prepare(unsigned) override {
     this->reset_output();
     prepare_unary_input<T, REF_OP>(this->Input1);
@@ -236,6 +261,16 @@ public:
   RippleUnaryDomainTest(TestFramework &TF) : TestBase<T>(TF, 128 / sizeof(T)) {}
 
   std::pair<bool, std::string> xfail() const override {
+#if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
+    __HEXAGON_ARCH__ == 81
+    bool UsesFP32 = __is_same(T, float);
+#if __has_bf16__
+    UsesFP32 |= __is_same(T, __bf16);
+#endif
+    if (REF_OP == logf_fn || (UsesFP32 && REF_OP == acosf_fn))
+      return {true, "Hexagon v81 IEEE-mode vector math produces incorrect "
+                    "results outside the function's domain."};
+#endif
 #if defined(__hexagon__) && __has_Float16__
 #if __HEXAGON_ARCH__ >= 79
     if (__is_same(T, _Float16) && REF_OP == acosf_fn)
@@ -282,6 +317,12 @@ public:
   RippleUnaryZeroTest(TestFramework &TF) : TestBase<T>(TF, 128 / sizeof(T)) {}
 
   std::pair<bool, std::string> xfail() const override {
+#if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
+    __HEXAGON_ARCH__ == 81
+    if (REF_OP == logf_fn)
+      return {true, "Hexagon v81 IEEE-mode vector log does not return "
+                    "negative infinity for zero inputs."};
+#endif
 #ifdef __hexagon__
 #if defined(__HVX__) && !defined(__HVX_IEEE_FP__) && \
     (__HEXAGON_ARCH__ == 68 || __HEXAGON_ARCH__ == 69 || \

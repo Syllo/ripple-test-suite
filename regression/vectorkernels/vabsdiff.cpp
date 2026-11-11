@@ -49,6 +49,10 @@ public:
 
   void run(unsigned) override { vabsdiff_ripple(&A[0], &B[0], &C[0]); }
 
+  std::pair<bool, std::string> xfail() const override {
+    return xfailHexagonV81IEEEFP32<T>();
+  }
+
   bool verify() const override {
     return isclose(N, &A[0], &ARef[0], pow(0.1, SigDigits));
   }

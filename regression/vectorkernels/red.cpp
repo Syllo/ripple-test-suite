@@ -54,6 +54,10 @@ public:
 
   void run(unsigned) override { Result = red_ripple(&A[0]); }
 
+  std::pair<bool, std::string> xfail() const override {
+    return xfailHexagonV81IEEEFP32<T>();
+  }
+
   bool verify() const override {
     return isclose(1, &Result, &ResultRef, pow(0.1, SigDigits));
   }

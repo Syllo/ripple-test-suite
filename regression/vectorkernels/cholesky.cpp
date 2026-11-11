@@ -189,6 +189,10 @@ public:
     cholesky_ripple(&aRe[0], &aIm[0], &lOutRe[0], &lOutIm[0]);
   }
 
+  std::pair<bool, std::string> xfail() const override {
+    return xfailHexagonV81IEEEFP32<T>();
+  }
+
   bool verify() const override {
     return isclose(CHOL_SIZE, &lOutRe[0], &lRefRe[0], pow(0.1, SigDigits)) &&
            isclose(CHOL_SIZE, &lOutIm[0], &lRefIm[0], pow(0.1, SigDigits));

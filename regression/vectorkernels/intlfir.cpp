@@ -195,6 +195,10 @@ public:
                        &Coefficients[0], &Output[0]);
   }
 
+  std::pair<bool, std::string> xfail() const override {
+    return xfailHexagonV81IEEEFP32<float>();
+  }
+
   bool verify() const override {
     // The Ripple path uses four independent accumulators for full vectors,
     // while the oracle deliberately sums taps in order. Allow for the

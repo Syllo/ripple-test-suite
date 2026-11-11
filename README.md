@@ -80,12 +80,15 @@ In the above build script, we use hexagon libstdc++ to build a Hexagon standalon
 Use Hexagon v81 for combined fp16/bf16 coverage. The Ripple compiler enables
 `_Float16` from v68 and `__bf16` from v81; its HVX bf16 vector types also require
 v81 and 128-byte vectors. CI builds and runs separate v68, v69, v73, v75, v79,
-and v81 configurations with 128-byte HVX vectors and the default flags. It
-also runs v68/v69/v73/v75 with `-mhvx-ieee-fp`, which selects hardware IEEE
-operations on these legacy QFloat targets. v68 covers the first fp16 target,
-and v75 covers hardware before the v79 transition away from IEEE HVX
+and v81 configurations with 128-byte HVX vectors, each with and without
+`-mhvx-ieee-fp`. The flag selects hardware IEEE operations on the legacy
+QFloat targets and IEEE-compatible QFloat mode from v79. v68 covers the first
+fp16 target, and v75 covers hardware before the v79 transition away from IEEE HVX
 operations. The legacy log-zero expected failures apply only without the
-IEEE flag on v68/v69/v73/v75.
+IEEE flag on v68/v69/v73/v75. Reproduced v81 IEEE-mode numerical failures
+in the regressions, fully connected NN mini-app, and vector kernels have
+scoped XFAILs; the affected tests still run, and crashes and unexpected passes
+fail the check.
 The `__has_bf16__` guards exclude bf16 tests before v81; fp16 tests remain
 enabled. Both compiler-rt and the test suite use the selected architecture, and
 the simulator is passed that version explicitly. Each architecture job builds

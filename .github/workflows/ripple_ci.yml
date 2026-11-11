@@ -282,11 +282,7 @@ jobs:
       - name: Build and run Ripple Test Suite in each FP mode
         shell: bash
         run: |
-          fp_modes=(default)
-          # Exercise hardware IEEE mode on the legacy QFloat architectures.
-          case "${{ matrix.arch_version }}" in
-            v68|v69|v73|v75) fp_modes+=(ieee) ;;
-          esac
+          fp_modes=(default ieee)
 
           result=0
           for fp_mode in "${fp_modes[@]}"; do
