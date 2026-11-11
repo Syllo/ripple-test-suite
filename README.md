@@ -88,7 +88,9 @@ operations. The legacy log-zero expected failures apply only without the
 IEEE flag on v68/v69/v73/v75.
 The `__has_bf16__` guards exclude bf16 tests before v81; fp16 tests remain
 enabled. Both compiler-rt and the test suite use the selected architecture, and
-the simulator is passed that version explicitly.
+the simulator is passed that version explicitly. Each architecture job builds
+the compiler and compiler-rt once, then reuses them for separate test-suite
+builds in each FP mode.
 
 v67 covers a target without `_Float16`. With the LLVM FP16 type and HVX math
 header guards, the v67 math sources pass compiler-only syntax checks. Runtime
