@@ -32,9 +32,9 @@ template <typename T> struct Reduce<ADD, T> {
 
 template <typename T> struct Reduce<MIN, T> {
   static T neutral_element() {
-    return std::numeric_limits<T>::has_infinity
-               ? std::numeric_limits<T>::infinity()
-               : std::numeric_limits<T>::max();
+    return FloatLimits<T>::has_infinity
+               ? FloatLimits<T>::infinity()
+               : FloatLimits<T>::max();
   }
   template <unsigned mask> static T op(const T &x) {
     return ripple_reducemin(mask, x);
@@ -44,9 +44,9 @@ template <typename T> struct Reduce<MIN, T> {
 
 template <typename T> struct Reduce<MAX, T> {
   static T neutral_element() {
-    return std::numeric_limits<T>::has_infinity
-               ? -std::numeric_limits<T>::infinity()
-               : std::numeric_limits<T>::min();
+    return FloatLimits<T>::has_infinity
+               ? -FloatLimits<T>::infinity()
+               : FloatLimits<T>::min();
   }
   template <unsigned mask> static T op(const T &x) {
     return ripple_reducemax(mask, x);
@@ -145,12 +145,17 @@ void reduce_2d_2(int N, const T (*X)[K][L], T (*Y)[K]) {
     reduce_2d_2<O, BK, BL, L>(K, X[i], Y[i]);
 }
 
+// Accumulate FP16/BF16 references in float. Rounding after each scalar addition
+// can lose terms that Ripple's reordered reduction retains.
+template <typename T> using ReduceReferenceType = decltype(T(0) + 0.0f);
+
 template <typename T, unsigned K, ReduceOp O>
 void reduce_1d_ref(int N, const T (*X)[K], T *Y) {
+  using RefT = ReduceReferenceType<T>;
   for (int i = 0; i < N; ++i) {
-    T acc = neutral_element<T, O>();
+    RefT acc = neutral_element<RefT, O>();
     for (int k = 0; k < K; ++k) {
-      acc = reduce_update<T, O>(acc, X[i][k]);
+      acc = reduce_update<RefT, O>(acc, X[i][k]);
     }
     Y[i] = acc;
   }
@@ -158,11 +163,12 @@ void reduce_1d_ref(int N, const T (*X)[K], T *Y) {
 
 template <typename T, unsigned K, unsigned L, ReduceOp O>
 void reduce_2d_0_ref(int N, const T (*X)[K][L], T *Y) {
+  using RefT = ReduceReferenceType<T>;
   for (int i = 0; i < N; i++) {
-    T acc = neutral_element<T, O>();
+    RefT acc = neutral_element<RefT, O>();
     for (int k = 0; k < K; ++k) {
       for (int l = 0; l < L; ++l) {
-        acc = reduce_update<T, O>(acc, X[i][k][l]);
+        acc = reduce_update<RefT, O>(acc, X[i][k][l]);
       }
     }
     Y[i] = acc;
@@ -171,11 +177,12 @@ void reduce_2d_0_ref(int N, const T (*X)[K][L], T *Y) {
 
 template <typename T, unsigned K, unsigned L, ReduceOp O>
 void reduce_2d_1_ref(int N, const T (*X)[K][L], T (*Y)[K]) {
+  using RefT = ReduceReferenceType<T>;
   for (int i = 0; i < N; i++) {
     for (int k = 0; k < K; ++k) {
-      T acc = neutral_element<T, O>();
+      RefT acc = neutral_element<RefT, O>();
       for (int l = 0; l < L; ++l) {
-        acc = reduce_update<T, O>(acc, X[i][k][l]);
+        acc = reduce_update<RefT, O>(acc, X[i][k][l]);
       }
       Y[i][k] = acc;
     }
@@ -184,11 +191,12 @@ void reduce_2d_1_ref(int N, const T (*X)[K][L], T (*Y)[K]) {
 
 template <typename T, unsigned K, unsigned L, ReduceOp O>
 void reduce_2d_2_ref(int N, const T (*X)[K][L], T (*Y)[L]) {
+  using RefT = ReduceReferenceType<T>;
   for (int i = 0; i < N; i++) {
     for (int l = 0; l < L; ++l) {
-      T acc = neutral_element<T, O>();
+      RefT acc = neutral_element<RefT, O>();
       for (int k = 0; k < K; ++k) {
-        acc = reduce_update<T, O>(acc, X[i][k][l]);
+        acc = reduce_update<RefT, O>(acc, X[i][k][l]);
       }
       Y[i][l] = acc;
     }
@@ -207,7 +215,7 @@ public:
     // Keep addition sums finite; overflow is tested separately.
     for (int i = 0; i < N; i++) {
       for (int k = 0; k < K; k++) {
-        X[i][k] = std::numeric_limits<T>::max() *
+        X[i][k] = FloatLimits<T>::max() *
                   (randn() - (O == ReduceOp::ADD ? 0 : 0.5)) /
                   (O == ReduceOp::ADD ? 2 * K : 1);
       }
@@ -274,7 +282,7 @@ public:
     for (int i = 0; i < N; i++) {
       for (int k = 0; k < K; k++) {
         for (int l = 0; l < L; l++) {
-          X[i][k][l] = std::numeric_limits<T>::max() *
+          X[i][k][l] = FloatLimits<T>::max() *
                        (randn() - (O == ReduceOp::ADD ? 0 : 0.5)) / (K * L) / 2;
         }
       }
@@ -339,6 +347,40 @@ DefineTest<Reduce2DTest<double, ReduceOp::MIN, 10, 4, 8>>
 // aarch64 does not lower bf16 masked stores, see
 // https://github.com/llvm/llvm-project/issues/201149.
 #if __has_bf16__ && !defined __aarch64__
+class BF16ReduceAddRoundingTest : public Test {
+  __bf16 X1[1][23], X2[1][23][23], Output[2], Reference[2];
+  // BF16 represents 1 + 22/256 exactly; 529 rounds to 528.
+  const __bf16 Expected[2] = {1.0859375f, 528.0f};
+
+public:
+  BF16ReduceAddRoundingTest(TestFramework &TF) : Test(TF) {
+    // BF16 sequential addition loses the small terms after 1, and stops at
+    // 256 when summing 529 ones. Round the float reference only at the end.
+    X1[0][0] = 1.0f;
+    std::fill(X1[0] + 1, X1[0] + 23, __bf16(0x1p-8f));
+    for (unsigned k = 0; k < 23; ++k)
+      std::fill(X2[0][k], X2[0][k] + 23, __bf16(1.0f));
+    reduce_1d_ref<__bf16, 23, ADD>(1, X1, &Reference[0]);
+    reduce_2d_0_ref<__bf16, 23, 23, ADD>(1, X2, &Reference[1]);
+  }
+
+  void prepare(unsigned) override {
+    std::fill(Output, Output + 2, __bf16(42));
+  }
+
+  void run(unsigned) override {
+    reduce_1d<ADD, 32, 23>(1, X1, &Output[0]);
+    reduce_2d_0<ADD, 4, 8, 23, 23>(1, X2, &Output[1]);
+  }
+
+  bool verify() const override {
+    return isclose(2, Reference, Expected, 0.0, 0.0) &&
+           isclose(2, Output, Expected, 0.01);
+  }
+};
+
+DefineTest<BF16ReduceAddRoundingTest>
+    TBF16ReduceAddRounding("ReduceTest<+,bf16,rounding>");
 DefineTest<ReduceAddOverflowTest<__bf16, 32>>
     TBF16ReduceAddOverflow("ReduceTest1D<+,bf16,overflow>");
 DefineTest<Reduce1DTest<__bf16, ReduceOp::ADD, 2, 32>>
