@@ -70,6 +70,11 @@ public:
 
   void run(unsigned) override { swish_ripple(&Output[0], &Input[0], Count); }
 
+  std::pair<bool, std::string> xfail() const override {
+    // Integer Swish also performs the activation in FP32.
+    return xfailHexagonV81IEEEFP32<float>();
+  }
+
   bool verify() const override {
     return isclose(Count, &Output[0], &Reference[0], pow(0.1, SigDigits));
   }

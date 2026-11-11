@@ -94,6 +94,16 @@ public:
                        reinterpret_cast<Dtype *>(B), N);
   }
 
+  std::pair<bool, std::string> xfail() const override {
+#if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
+    __HEXAGON_ARCH__ == 81
+    if (KT == Ripple)
+      return {true, "Hexagon v81 IEEE-mode FP16/BF16 vector multiplication "
+                    "produces incorrect results."};
+#endif
+    return {false, ""};
+  }
+
   void run(unsigned) override {
     if (KT == Reference)
       flat_mul_reference(reinterpret_cast<Dtype *>(Y),

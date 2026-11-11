@@ -223,6 +223,20 @@ public:
     reduce_1d_ref<T, K, O>(N, X, XRedRef);
   }
 
+  std::pair<bool, std::string> xfail() const override {
+#if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
+    __HEXAGON_ARCH__ == 81
+    bool UsesFP32 = __is_same(T, float);
+#if __has_bf16__
+    UsesFP32 |= __is_same(T, __bf16);
+#endif
+    if (O == ReduceOp::ADD && UsesFP32)
+      return {true, "Hexagon v81 IEEE-mode FP32/BF16 vector addition "
+                    "produces incorrect reduction results."};
+#endif
+    return {false, ""};
+  }
+
   void run(unsigned) override { reduce_1d<O, BK, K>(N, X, XRed); }
 
   bool verify() const override {
@@ -246,6 +260,12 @@ public:
   }
 
   std::pair<bool, std::string> xfail() const override {
+#if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
+    __HEXAGON_ARCH__ == 81
+    if (!__is_same(T, double))
+      return {true, "Hexagon v81 IEEE-mode vector addition does not return "
+                    "signed infinity on reduction overflow."};
+#endif
 #if defined(__hexagon__) && defined(__HVX__) && !defined(__HVX_IEEE_FP__) && \
     (__HEXAGON_ARCH__ == 68 || __HEXAGON_ARCH__ == 69 || \
      __HEXAGON_ARCH__ == 73 || __HEXAGON_ARCH__ == 75)
@@ -290,6 +310,20 @@ public:
     reduce_2d_0_ref<T, K, L, O>(N, X, XRed0Ref);
     reduce_2d_1_ref<T, K, L, O>(N, X, XRed1Ref);
     reduce_2d_2_ref<T, K, L, O>(N, X, XRed2Ref);
+  }
+
+  std::pair<bool, std::string> xfail() const override {
+#if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
+    __HEXAGON_ARCH__ == 81
+    bool UsesFP32 = __is_same(T, float);
+#if __has_bf16__
+    UsesFP32 |= __is_same(T, __bf16);
+#endif
+    if (O == ReduceOp::ADD && UsesFP32)
+      return {true, "Hexagon v81 IEEE-mode FP32/BF16 vector addition "
+                    "produces incorrect reduction results."};
+#endif
+    return {false, ""};
   }
 
   void run(unsigned) override {
@@ -362,6 +396,15 @@ public:
       std::fill(X2[0][k], X2[0][k] + 23, __bf16(1.0f));
     reduce_1d_ref<__bf16, 23, ADD>(1, X1, &Reference[0]);
     reduce_2d_0_ref<__bf16, 23, 23, ADD>(1, X2, &Reference[1]);
+  }
+
+  std::pair<bool, std::string> xfail() const override {
+#if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
+    __HEXAGON_ARCH__ == 81
+    return {true, "Hexagon v81 IEEE-mode BF16 vector addition produces "
+                  "incorrect reduction results."};
+#endif
+    return {false, ""};
   }
 
   void prepare(unsigned) override {

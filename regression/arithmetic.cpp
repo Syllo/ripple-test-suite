@@ -99,6 +99,20 @@ public:
     }
   }
 
+  std::pair<bool, std::string> xfail() const override {
+#if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
+    __HEXAGON_ARCH__ == 81
+    bool UsesFP32 = __is_same(T, float);
+#if __has_bf16__
+    UsesFP32 |= __is_same(T, __bf16);
+#endif
+    if (UsesFP32)
+      return {true, "Hexagon v81 IEEE-mode FP32/BF16 vector arithmetic "
+                    "produces incorrect results."};
+#endif
+    return {false, ""};
+  }
+
   void run(unsigned) override {
     if (O == Op::ADD)
       add_ripple(N, &(X[0]), &(Y[0]), &(XopY[0]));
@@ -120,8 +134,11 @@ class AddCancellationTest : public Test {
 public:
   AddCancellationTest(TestFramework &TF)
       : Test(TF), X(N), Y(N), Output(N), Expected(N) {
-    // 1 - 2^-24 is the FP32 value immediately below 1. Legacy QFloat
-    // addition doubles the small residual when these operands cancel.
+    // 1 - 2^-24 is the FP32 value immediately below 1. Both stored operands
+    // and their small residual are exactly representable in FP32. This is a
+    // single addition, so the extra internal precision of v79+ QFloat in IEEE
+    // mode should preserve the residual even without intermediate IEEE
+    // rounding. Legacy QFloat addition doubles it when these operands cancel.
     const float Step = 1.0f / (1u << 24);
     for (size_t i = 0; i < N; ++i) {
       const float Scale = static_cast<float>(1u << (i % 5));
@@ -135,6 +152,11 @@ public:
   }
 
   std::pair<bool, std::string> xfail() const override {
+#if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
+    __HEXAGON_ARCH__ == 81
+    return {true, "Hexagon v81 IEEE-mode vector addition produces incorrect "
+                  "results near cancellation."};
+#endif
 #if defined(__hexagon__) && defined(__HVX__) && !defined(__HVX_IEEE_FP__) && \
     (__HEXAGON_ARCH__ == 68 || __HEXAGON_ARCH__ == 69 || \
      __HEXAGON_ARCH__ == 73 || __HEXAGON_ARCH__ == 75)
@@ -173,6 +195,12 @@ public:
   }
 
   std::pair<bool, std::string> xfail() const override {
+#if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
+    __HEXAGON_ARCH__ == 81
+    if (!__is_same(T, double))
+      return {true, "Hexagon v81 IEEE-mode vector addition does not return "
+                    "signed infinity on overflow."};
+#endif
 #if defined(__hexagon__) && defined(__HVX__) && !defined(__HVX_IEEE_FP__) && \
     (__HEXAGON_ARCH__ == 68 || __HEXAGON_ARCH__ == 69 || \
      __HEXAGON_ARCH__ == 73 || __HEXAGON_ARCH__ == 75)

@@ -61,6 +61,10 @@ public:
 
   void run(unsigned) override { sum_along_columns<N>(M, X, ColumnSum); }
 
+  std::pair<bool, std::string> xfail() const override {
+    return xfailHexagonV81IEEEFP32<float>();
+  }
+
   bool verify() const override { return equal(1e-5, ColumnSum, ColumnSumRef); }
 };
 

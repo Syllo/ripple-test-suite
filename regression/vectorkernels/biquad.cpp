@@ -208,6 +208,10 @@ public:
                            BlockSize);
   }
 
+  std::pair<bool, std::string> xfail() const override {
+    return xfailHexagonV81IEEEFP32<float>();
+  }
+
   bool verify() const override {
     return isclose(SampleCount, &Output[0], &Reference[0]) &&
            isclose(StoredStateCount, &States[0], &ReferenceStates[0]);

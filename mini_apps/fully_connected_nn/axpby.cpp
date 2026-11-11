@@ -69,6 +69,10 @@ public:
 
   void run(unsigned) override { axpby(N, Alpha, X, Beta, Y, Out); }
 
+  std::pair<bool, std::string> xfail() const override {
+    return xfailHexagonV81IEEEFP32<float>();
+  }
+
   bool verify() const override { return equal(1e-5, Out, OutRef); }
 };
 

@@ -54,6 +54,7 @@ public:
   /**
    * @brief Returns {true, "<REASON-FOR-XFAIL>"} if the test is expected to
    * fail. Expected failures are executed and must fail verification.
+   * Crashes remain failures, and successful verification is an XPASS failure.
    */
   virtual std::pair<bool, std::string> xfail() const { return {false, ""}; }
 
@@ -71,6 +72,19 @@ protected:
 
   TestFramework &m_TestFramework;
 };
+
+/// Opt in only for tests with reproduced v81 IEEE-mode FP32 failures.
+/// Use the arithmetic type, which can differ from the input/output type.
+template <typename T>
+std::pair<bool, std::string> xfailHexagonV81IEEEFP32() {
+#if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
+    __HEXAGON_ARCH__ == 81
+  if (__is_same(T, float))
+    return {true, "Hexagon v81 IEEE-mode FP32 vector arithmetic produces "
+                  "incorrect results."};
+#endif
+  return {false, ""};
+}
 
 class TestFramework {
 public:

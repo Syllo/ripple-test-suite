@@ -134,6 +134,16 @@ public:
     fp16_rsqrt_reference(N, X, YRef);
   }
 
+  std::pair<bool, std::string> xfail() const override {
+#if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
+    __HEXAGON_ARCH__ == 81
+    if (KT == Ripple)
+      return {true, "Hexagon v81 IEEE-mode vector arithmetic produces "
+                    "incorrect FP16 reciprocal square root results."};
+#endif
+    return {false, ""};
+  }
+
   void run(unsigned) override {
     if (KT == Reference)
       fp16_rsqrt_reference(N, X, Y);

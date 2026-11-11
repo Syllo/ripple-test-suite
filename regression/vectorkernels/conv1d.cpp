@@ -65,6 +65,10 @@ public:
     conv1d_ripple(&Output[0], &Input[0], &Kernel[0]);
   }
 
+  std::pair<bool, std::string> xfail() const override {
+    return xfailHexagonV81IEEEFP32<T>();
+  }
+
   bool verify() const override {
     return isclose(OutputSize, &Output[0], &Reference[0],
                    pow(0.1, SigDigits));
