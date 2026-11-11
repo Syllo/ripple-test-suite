@@ -133,7 +133,7 @@ jobs:
 
   hexagon_build_and_test:
     if: github.repository_owner == 'qualcomm'
-    name: Build and test (Hexagon ${{ matrix.arch_version }}, ${{ matrix.fp_mode.name }})
+    name: Build and test (Hexagon ${{ matrix.arch_version }})
     runs-on: [self-hosted, ripple-ci]
     timeout-minutes: 90
     strategy:
@@ -143,21 +143,6 @@ jobs:
         # v85 models have HVX/VTCM; compiler support is in upstream LLVM main,
         # and is absent from this LLVM 23 release branch. See README.md.
         arch_version: [v68, v69, v73, v75, v79, v81]
-        fp_mode:
-          - name: default
-            cxx_flags: ""
-          - name: ieee
-            cxx_flags: -mhvx-ieee-fp
-        # Exercise hardware IEEE mode on the legacy QFloat architectures.
-        exclude:
-          - arch_version: v79
-            fp_mode:
-              name: ieee
-              cxx_flags: -mhvx-ieee-fp
-          - arch_version: v81
-            fp_mode:
-              name: ieee
-              cxx_flags: -mhvx-ieee-fp
         targets:
           - arch: Hexagon
             triple: hexagon-unknown-unknown-elf
@@ -294,21 +279,39 @@ jobs:
       - name: Install Ripple compiler-rt
         run: cmake --install build-compiler-rt --prefix "$(${{ github.workspace }}/install/bin/clang --print-resource-dir)"
 
-      - name: Remove stale Ripple test-suite build directory
-        run: rm -rf build-ripple-test-suite
-
-      - name: Configure Ripple Test Suite
+      - name: Build and run Ripple Test Suite in each FP mode
+        shell: bash
         run: |
-          cmake -G Ninja -S ripple-test-suite -B build-ripple-test-suite \
-            -DCMAKE_SYSTEM_NAME=HexagonStandalone \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_COMPILER=${{ github.workspace }}/install/bin/clang++ \
-            -DCMAKE_CXX_FLAGS="-m${{ matrix.arch_version }} -mhvx -mhvx-length=128B ${{ matrix.fp_mode.cxx_flags }} -std=c++11 -stdlib=libstdc++" \
-            -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT" \
-            -DCMAKE_CROSSCOMPILING_EMULATOR="$CI_CMAKE_CROSSCOMPILING_EMULATOR"
+          fp_modes=(default)
+          # Exercise hardware IEEE mode on the legacy QFloat architectures.
+          case "${{ matrix.arch_version }}" in
+            v68|v69|v73|v75) fp_modes+=(ieee) ;;
+          esac
 
-      - name: Build Ripple Test Suite
-        run: cmake --build build-ripple-test-suite
-
-      - name: Run Ripple Test Suite
-        run: cmake --build build-ripple-test-suite --target check -- -k 0
+          result=0
+          for fp_mode in "${fp_modes[@]}"; do
+            fp_flags=""
+            build_dir=build-ripple-test-suite
+            if [ "$fp_mode" = ieee ]; then
+              fp_flags=-mhvx-ieee-fp
+              build_dir=build-ripple-test-suite-ieee
+            fi
+            rm -rf "$build_dir"
+            echo "::group::Ripple Test Suite (${{ matrix.arch_version }}, $fp_mode)"
+            if cmake -G Ninja -S ripple-test-suite -B "$build_dir" \
+                -DCMAKE_SYSTEM_NAME=HexagonStandalone \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_CXX_COMPILER=${{ github.workspace }}/install/bin/clang++ \
+                -DCMAKE_CXX_FLAGS="-m${{ matrix.arch_version }} -mhvx -mhvx-length=128B $fp_flags -std=c++11 -stdlib=libstdc++" \
+                -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT" \
+                -DCMAKE_CROSSCOMPILING_EMULATOR="$CI_CMAKE_CROSSCOMPILING_EMULATOR" && \
+               cmake --build "$build_dir" && \
+               cmake --build "$build_dir" --target check -- -k 0; then
+              echo "::endgroup::"
+            else
+              echo "::endgroup::"
+              echo "::error::Ripple Test Suite failed (${{ matrix.arch_version }}, $fp_mode)"
+              result=1
+            fi
+          done
+          exit "$result"
