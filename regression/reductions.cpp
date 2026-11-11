@@ -201,10 +201,12 @@ class Reduce1DTest : public Test {
 
 public:
   Reduce1DTest(TestFramework &TestFramework) : Test(TestFramework) {
+    // Keep addition sums finite; overflow is tested separately.
     for (int i = 0; i < N; i++) {
       for (int k = 0; k < K; k++) {
         X[i][k] = std::numeric_limits<T>::max() *
-                  (randn() - (O == ReduceOp::ADD ? 0 : 0.5));
+                  (randn() - (O == ReduceOp::ADD ? 0 : 0.5)) /
+                  (O == ReduceOp::ADD ? 2 * K : 1);
       }
     }
     reduce_1d_ref<T, K, O>(N, X, XRedRef);
@@ -215,6 +217,41 @@ public:
   bool verify() const override {
     return isclose(N, &(XRed[0]), &(XRedRef[0]), pow(0.1, SigDigits));
   }
+};
+
+template <typename T, unsigned BK> class ReduceAddOverflowTest : public Test {
+  static constexpr unsigned N = 2, K = 23;
+  T X[N][K], Output[N], Expected[N];
+
+public:
+  ReduceAddOverflowTest(TestFramework &TF) : Test(TF) {
+    for (unsigned i = 0; i < N; ++i) {
+      const T Max = std::numeric_limits<T>::max();
+      const T Inf = std::numeric_limits<T>::infinity();
+      for (unsigned k = 0; k < K; ++k)
+        X[i][k] = i ? -Max : Max;
+      Expected[i] = i ? -Inf : Inf;
+    }
+  }
+
+  std::pair<bool, std::string> xfail() const override {
+#if defined(__hexagon__) && defined(__HVX__) && !defined(__HVX_IEEE_FP__) && \
+    (__HEXAGON_ARCH__ == 68 || __HEXAGON_ARCH__ == 69 || \
+     __HEXAGON_ARCH__ == 73 || __HEXAGON_ARCH__ == 75)
+    if (__is_same(T, float))
+      return {true, "Legacy Hexagon QFloat addition returns NaN instead of "
+                    "signed infinity on FP32 reduction overflow."};
+#endif
+    return {false, ""};
+  }
+
+  void prepare(unsigned) override {
+    std::fill(Output, Output + N, T(42));
+  }
+
+  void run(unsigned) override { reduce_1d<ADD, BK, K>(N, X, Output); }
+
+  bool verify() const override { return isclose(N, Output, Expected); }
 };
 
 template <typename T, ReduceOp O, unsigned SigDigits, unsigned BK, unsigned BL, unsigned K = 23,
@@ -263,6 +300,11 @@ DefineTest<Reduce1DTest<double, ReduceOp::ADD, 4, 8>>
 DefineTest<Reduce2DTest<double, ReduceOp::ADD, 4, 4, 8>>
     TF64ReduceAdd2D("ReduceTest2D<+,f64>");
 
+DefineTest<ReduceAddOverflowTest<float, 32>>
+    TF32ReduceAddOverflow("ReduceTest1D<+,f32,overflow>");
+DefineTest<ReduceAddOverflowTest<double, 8>>
+    TF64ReduceAddOverflow("ReduceTest1D<+,f64,overflow>");
+
 DefineTest<Reduce1DTest<float, ReduceOp::MAX, 10, 32>>
     TF32ReduceMax1D("ReduceTest1D<max,f32>");
 DefineTest<Reduce2DTest<float, ReduceOp::MAX, 10, 4, 8>>
@@ -298,4 +340,4 @@ DefineTest<Reduce2DTest<__bf16, ReduceOp::MIN, 10, 4, 8>>
     TBF16ReduceMin2D("ReduceTest2D<min,bf16>");
 #endif
 
-// TODO: Test special floating point numbers. nan, inf, subnormal, etc.
+// TODO: Test NaN/infinity inputs, signed zeros, and subnormals.
