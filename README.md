@@ -105,7 +105,11 @@ Use Hexagon v81 for combined fp16/bf16 coverage. The Ripple compiler enables
 `_Float16` from v68 and `__bf16` from v81; its HVX bf16 vector types also require
 v81 and 128-byte vectors. CI builds and runs separate v68, v69, v73, v75, v79,
 and v81 configurations with 128-byte HVX vectors, each with and without
-`-mhvx-ieee-fp`. The flag selects hardware IEEE operations on the legacy
+`-mhvx-ieee-fp`. Pull requests and pushes to main use v68, v79, and v81 as
+representatives of legacy QFloat, v79+ QFloat, and BF16/v81 IEEE behavior.
+Manual runs and the weekly Sunday 12:00 UTC run cover all six versions.
+Scheduled runs have their own concurrency group so pushes do not cancel them.
+The flag selects hardware IEEE operations on the legacy
 QFloat targets and IEEE-compatible QFloat mode from v79. v68 covers the first
 fp16 target, and v75 covers hardware before the v79 transition away from IEEE HVX
 operations. The legacy log-zero expected failures apply only without the
@@ -116,13 +120,15 @@ fail the check.
 The `__has_bf16__` guards exclude bf16 tests before v81; fp16 tests remain
 enabled. Both compiler-rt and the test suite use the selected architecture, and
 the simulator is passed that version explicitly. A single Hexagon job builds
-the compiler once, then builds compiler-rt for each version. Its thread libraries
-use version-specific instructions and SDK headers, so each version has its own
-runtime install. Both FP-mode test builds select that install with
-`-resource-dir`. The job runs every available version and mode even after a
-failure, with separate log groups, error annotations, and a results table in
-the job summary. A failed runtime blocks only its version's two FP modes;
-any runtime or test failure still fails the job.
+the compiler once, then builds and installs compiler-rt for one version and
+immediately runs that version's tests in both FP modes before moving to the next
+version. Its thread libraries use version-specific instructions and SDK headers,
+so each version has its own runtime install. Both FP-mode test builds select
+that install's headers with `-resource-dir`. A runtime configure, build, or
+install failure skips only that version's two FP modes. The job continues with
+the other versions and modes, with separate log groups, error annotations, and
+a results table in the job summary. Any runtime or test failure still fails
+the job.
 
 v67 covers a target without `_Float16`. With the LLVM FP16 type and HVX math
 header guards, the v67 math sources pass compiler-only syntax checks. Runtime
