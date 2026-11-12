@@ -133,21 +133,15 @@ jobs:
 
   hexagon_build_and_test:
     if: github.repository_owner == 'qualcomm'
-    name: Build and test (Hexagon ${{ matrix.arch_version }})
+    name: Build and test (Hexagon)
     runs-on: [self-hosted, ripple-ci]
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        # SDK 6.7.0.0 (Tools 21.0.04) provides only non-HVX v83 models.
-        # v85 models have HVX/VTCM; compiler support is in upstream LLVM main,
-        # and is absent from this LLVM 23 release branch. See README.md.
-        arch_version: [v68, v69, v73, v75, v79, v81]
-        targets:
-          - arch: Hexagon
-            triple: hexagon-unknown-unknown-elf
-            cxx_flags: -stdlib=libc++ -D_USE_GENERIC_XLOCALE_SHIMS -D_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE -D_C99 -D_C_AS_CPP -D_HAS_GENERIC_TEMPLATES=0
-            sdk: qualcomm-community-edition
+    timeout-minutes: 180
+    env:
+      HEXAGON_TARGET_TRIPLE: hexagon-unknown-unknown-elf
+      # SDK 6.7.0.0 (Tools 21.0.04) provides only non-HVX v83 models.
+      # v85 models have HVX/VTCM; compiler support is in upstream LLVM main,
+      # and is absent from this LLVM 23 release branch. See README.md.
+      HEXAGON_ARCH_VERSIONS: v68 v69 v73 v75 v79 v81
 
     steps:
       - name: Checkout Ripple test suite
@@ -190,14 +184,13 @@ jobs:
             -DLLVM_ENABLE_PROJECTS="clang" \
             -DLLVM_EXTERNAL_PROJECTS=eld \
             -DLLVM_EXTERNAL_ELD_SOURCE_DIR=eld \
-            -DLLVM_TARGETS_TO_BUILD=${{ matrix.targets.arch }} \
-            -DLLVM_DEFAULT_TARGET_TRIPLE=${{ matrix.targets.triple }}
+            -DLLVM_TARGETS_TO_BUILD=Hexagon \
+            -DLLVM_DEFAULT_TARGET_TRIPLE="$HEXAGON_TARGET_TRIPLE"
 
       - name: Build Ripple compiler
         run: cmake --build build
 
       - name: Setup Hexagon SDK community edition environment
-        if: matrix.targets.sdk == 'qualcomm-community-edition'
         shell: bash
         run: |
           if [ -z "${HEXAGON_SDK:-}" ]; then
@@ -214,16 +207,7 @@ jobs:
           fi
           echo "HEXAGON_SDK_ROOT=$HEXAGON_SDK_ROOT" >> "$GITHUB_ENV"
           echo "HEXAGON_TOOLS_ROOT=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools" >> "$GITHUB_ENV"
-          echo "HEXAGON_ARCH_VERSION=${{ matrix.arch_version }}" >> "$GITHUB_ENV"
-          echo "CI_CMAKE_CROSSCOMPILING_EMULATOR=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-sim;--m${{ matrix.arch_version }};--simulated_returnval;--" >> "$GITHUB_ENV"
           echo "CI_HEXAGON_SYSROOT=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools/target/hexagon" >> "$GITHUB_ENV"
-
-      - name: Fail on unknown SDK
-        if: matrix.targets.sdk != 'qualcomm-community-edition'
-        env:
-          SDK_VALUE: ${{ matrix.targets.sdk }}
-        run: |
-          echo "ERROR: Unknown sdk value '$SDK_VALUE'" >&2; exit 1
 
       - name: Validate Hexagon SDK environment
         run: |
@@ -233,83 +217,128 @@ jobs:
           if [ ! -d "$CI_HEXAGON_SYSROOT" ]; then
             echo "ERROR: Sysroot directory not found: $CI_HEXAGON_SYSROOT" >&2; exit 1
           fi
-          if [ -z "${CI_CMAKE_CROSSCOMPILING_EMULATOR:-}" ]; then
-            echo "ERROR: CI_CMAKE_CROSSCOMPILING_EMULATOR is not set" >&2; exit 1
+          if [ -z "${HEXAGON_TOOLS_ROOT:-}" ]; then
+            echo "ERROR: HEXAGON_TOOLS_ROOT is not set" >&2; exit 1
+          fi
+          if [ ! -x "$HEXAGON_TOOLS_ROOT/bin/hexagon-sim" ]; then
+            echo "ERROR: Hexagon simulator not found: $HEXAGON_TOOLS_ROOT/bin/hexagon-sim" >&2; exit 1
           fi
 
       - name: Install Ripple Compiler
         run: cmake --install build --prefix ${{ github.workspace }}/install
 
-      - name: Remove stale compiler-rt build directory
-        run: rm -rf build-compiler-rt
-
-      - name: Configure compiler-rt
-        run: |
-          cmake -G Ninja -S ripple/compiler-rt -B build-compiler-rt \
-            -DLLVM_CMAKE_DIR=${{ github.workspace }}/install \
-            -DCMAKE_SYSTEM_NAME=Linux \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DLLVM_ENABLE_ASSERTIONS=OFF \
-            -DCMAKE_C_COMPILER=${{ github.workspace }}/install/bin/clang \
-            -DCMAKE_CXX_COMPILER=${{ github.workspace }}/install/bin/clang++ \
-            -DCOMPILER_RT_OS_DIR= \
-            -DCOMPILER_RT_BUILD_BUILTINS=OFF \
-            -DCOMPILER_RT_BUILD_RIPPLE=ON \
-            -DCOMPILER_RT_BUILD_CRT=OFF \
-            -DCOMPILER_RT_BUILD_CTX_PROFILE=OFF \
-            -DCOMPILER_RT_BUILD_GWP_ASAN=OFF \
-            -DCOMPILER_RT_BUILD_LIBFUZZER=OFF \
-            -DCOMPILER_RT_BUILD_MEMPROF=OFF \
-            -DCOMPILER_RT_BUILD_ORC=OFF \
-            -DCOMPILER_RT_BUILD_PROFILE=OFF \
-            -DCOMPILER_RT_BUILD_SANITIZERS=OFF \
-            -DCOMPILER_RT_BUILD_XRAY=OFF \
-            -DCOMPILER_RT_DEFAULT_TARGET_TRIPLE=${{ matrix.targets.triple }} \
-            -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
-            -DCMAKE_C_COMPILER_TARGET=${{ matrix.targets.triple }} \
-            -DCMAKE_CXX_COMPILER_TARGET=${{ matrix.targets.triple }} \
-            -DCMAKE_C_FLAGS="-m${{ matrix.arch_version }}" \
-            -DCMAKE_CXX_FLAGS="-m${{ matrix.arch_version }} ${{ matrix.targets.cxx_flags }}" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=eld" \
-            -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT"
-
-      - name: Build Ripple compiler-rt
-        run: cmake --build build-compiler-rt
-
-      - name: Install Ripple compiler-rt
-        run: cmake --install build-compiler-rt --prefix "$(${{ github.workspace }}/install/bin/clang --print-resource-dir)"
-
-      - name: Build and run Ripple Test Suite in each FP mode
+      - name: Build and install Ripple compiler-rt for each Hexagon version
+        id: compiler_rt
         shell: bash
         run: |
-          fp_modes=(default ieee)
+          read -r -a arch_versions <<< "$HEXAGON_ARCH_VERSIONS"
+          compiler_resource_dir="$("${{ github.workspace }}/install/bin/clang" --print-resource-dir)"
+          printf '### Hexagon compiler-rt results\n\n| Version | Stage | Result |\n| --- | --- | --- |\n' >> "$GITHUB_STEP_SUMMARY"
 
           result=0
-          for fp_mode in "${fp_modes[@]}"; do
-            fp_flags=""
-            build_dir=build-ripple-test-suite
-            if [ "$fp_mode" = ieee ]; then
-              fp_flags=-mhvx-ieee-fp
-              build_dir=build-ripple-test-suite-ieee
-            fi
-            rm -rf "$build_dir"
-            echo "::group::Ripple Test Suite (${{ matrix.arch_version }}, $fp_mode)"
-            if cmake -G Ninja -S ripple-test-suite -B "$build_dir" \
-                -DCMAKE_SYSTEM_NAME=HexagonStandalone \
+          for arch_version in "${arch_versions[@]}"; do
+            build_dir="build-compiler-rt-$arch_version"
+            runtime_dir="$compiler_resource_dir/ripple/$arch_version"
+            echo "::group::Ripple compiler-rt ($arch_version)"
+            # Each runtime needs Clang's builtin headers as well as its own
+            # headers and libraries to serve as a complete resource directory.
+            if rm -rf "$build_dir" "$runtime_dir" && \
+               mkdir -p "$runtime_dir" && \
+               cp -aL "$compiler_resource_dir/include" "$runtime_dir/" && \
+               cmake -G Ninja -S ripple/compiler-rt -B "$build_dir" \
+                -DLLVM_CMAKE_DIR="${{ github.workspace }}/install" \
+                -DCMAKE_SYSTEM_NAME=Linux \
                 -DCMAKE_BUILD_TYPE=Release \
-                -DRIPPLE_TEST_SUITE_TEST_JOBS=4 \
-                -DRIPPLE_TEST_SUITE_TEST_REPEAT=1 \
-                -DCMAKE_CXX_COMPILER=${{ github.workspace }}/install/bin/clang++ \
-                -DCMAKE_CXX_FLAGS="-m${{ matrix.arch_version }} -mhvx -mhvx-length=128B $fp_flags -std=c++11 -stdlib=libstdc++" \
-                -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT" \
-                -DCMAKE_CROSSCOMPILING_EMULATOR="$CI_CMAKE_CROSSCOMPILING_EMULATOR" && \
+                -DLLVM_ENABLE_ASSERTIONS=OFF \
+                -DCMAKE_C_COMPILER="${{ github.workspace }}/install/bin/clang" \
+                -DCMAKE_CXX_COMPILER="${{ github.workspace }}/install/bin/clang++" \
+                -DCOMPILER_RT_OS_DIR= \
+                -DCOMPILER_RT_BUILD_BUILTINS=OFF \
+                -DCOMPILER_RT_BUILD_RIPPLE=ON \
+                -DCOMPILER_RT_BUILD_CRT=OFF \
+                -DCOMPILER_RT_BUILD_CTX_PROFILE=OFF \
+                -DCOMPILER_RT_BUILD_GWP_ASAN=OFF \
+                -DCOMPILER_RT_BUILD_LIBFUZZER=OFF \
+                -DCOMPILER_RT_BUILD_MEMPROF=OFF \
+                -DCOMPILER_RT_BUILD_ORC=OFF \
+                -DCOMPILER_RT_BUILD_PROFILE=OFF \
+                -DCOMPILER_RT_BUILD_SANITIZERS=OFF \
+                -DCOMPILER_RT_BUILD_XRAY=OFF \
+                -DCOMPILER_RT_DEFAULT_TARGET_TRIPLE="$HEXAGON_TARGET_TRIPLE" \
+                -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
+                -DCMAKE_C_COMPILER_TARGET="$HEXAGON_TARGET_TRIPLE" \
+                -DCMAKE_CXX_COMPILER_TARGET="$HEXAGON_TARGET_TRIPLE" \
+                -DHEXAGON_ARCH_VERSION="$arch_version" \
+                -DHEXAGON_SDK_ROOT="$HEXAGON_SDK_ROOT" \
+                -DHEXAGON_TOOLS_ROOT="$HEXAGON_TOOLS_ROOT" \
+                -DCMAKE_C_FLAGS="-m$arch_version" \
+                -DCMAKE_CXX_FLAGS="-m$arch_version -stdlib=libc++ -D_USE_GENERIC_XLOCALE_SHIMS -D_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE -D_C99 -D_C_AS_CPP -D_HAS_GENERIC_TEMPLATES=0" \
+                -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=eld" \
+                -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT" && \
                cmake --build "$build_dir" && \
-               cmake --build "$build_dir" --target check -- -k 0; then
-              echo "::endgroup::"
+               cmake --install "$build_dir" --prefix "$runtime_dir" && \
+               touch "$runtime_dir/.installed"; then
+              status=PASS
             else
-              echo "::endgroup::"
-              echo "::error::Ripple Test Suite failed (${{ matrix.arch_version }}, $fp_mode)"
+              echo "::error title=Hexagon $arch_version compiler-rt::Runtime configure, build, or install failed"
+              status=FAIL
               result=1
             fi
+            echo "::endgroup::"
+            printf '| %s | compiler-rt | %s |\n' "$arch_version" "$status" >> "$GITHUB_STEP_SUMMARY"
+          done
+          exit "$result"
+
+      - name: Build and run Ripple Test Suite in each FP mode
+        # A failed runtime must not prevent testing the other versions.
+        if: ${{ !cancelled() && (steps.compiler_rt.outcome == 'success' || steps.compiler_rt.outcome == 'failure') }}
+        shell: bash
+        run: |
+          read -r -a arch_versions <<< "$HEXAGON_ARCH_VERSIONS"
+          fp_modes=(default ieee)
+          compiler_resource_dir="$("${{ github.workspace }}/install/bin/clang" --print-resource-dir)"
+          printf '### Hexagon test results\n\n| Version | Stage | Result |\n| --- | --- | --- |\n' >> "$GITHUB_STEP_SUMMARY"
+
+          result=0
+          for arch_version in "${arch_versions[@]}"; do
+            runtime_dir="$compiler_resource_dir/ripple/$arch_version"
+            if [ ! -f "$runtime_dir/.installed" ]; then
+              echo "::error title=Hexagon $arch_version tests::Both FP modes are blocked because compiler-rt was not installed"
+              for fp_mode in "${fp_modes[@]}"; do
+                printf '| %s | %s | BLOCKED (compiler-rt failed) |\n' "$arch_version" "$fp_mode" >> "$GITHUB_STEP_SUMMARY"
+              done
+              result=1
+              continue
+            fi
+            emulator="$HEXAGON_TOOLS_ROOT/bin/hexagon-sim;--m$arch_version;--simulated_returnval;--"
+            for fp_mode in "${fp_modes[@]}"; do
+              fp_flags=""
+              build_dir="build-ripple-test-suite-$arch_version"
+              if [ "$fp_mode" = ieee ]; then
+                fp_flags=-mhvx-ieee-fp
+                build_dir="$build_dir-ieee"
+              fi
+              echo "::group::Ripple Test Suite ($arch_version, $fp_mode)"
+              if rm -rf "$build_dir" && \
+                 cmake -G Ninja -S ripple-test-suite -B "$build_dir" \
+                  -DCMAKE_SYSTEM_NAME=HexagonStandalone \
+                  -DCMAKE_BUILD_TYPE=Release \
+                  -DRIPPLE_TEST_SUITE_TEST_JOBS=4 \
+                  -DRIPPLE_TEST_SUITE_TEST_REPEAT=1 \
+                  -DCMAKE_CXX_COMPILER="${{ github.workspace }}/install/bin/clang++" \
+                  -DCMAKE_CXX_FLAGS="-m$arch_version -mhvx -mhvx-length=128B $fp_flags -resource-dir=\"$runtime_dir\" -std=c++11 -stdlib=libstdc++" \
+                  -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT" \
+                  -DCMAKE_CROSSCOMPILING_EMULATOR="$emulator" && \
+                 cmake --build "$build_dir" && \
+                 cmake --build "$build_dir" --target check -- -k 0; then
+                status=PASS
+              else
+                echo "::error title=Hexagon $arch_version $fp_mode::Test-suite configure, build, or check failed"
+                status=FAIL
+                result=1
+              fi
+              echo "::endgroup::"
+              printf '| %s | %s | %s |\n' "$arch_version" "$fp_mode" "$status" >> "$GITHUB_STEP_SUMMARY"
+            done
           done
           exit "$result"
