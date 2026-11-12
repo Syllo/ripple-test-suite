@@ -4,11 +4,16 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Including the event name separates cancellation groups by trigger, so
+  # pushes cannot cancel weekly scheduled runs or manual runs on the same ref.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 on:
   workflow_dispatch:
+  schedule:
+    # Scheduled workflows run on the latest commit on the default branch.
+    - cron: '0 12 * * 0' # Sunday noon UTC.
   push:
     branches:
       - main
@@ -141,7 +146,9 @@ jobs:
       # SDK 6.7.0.0 (Tools 21.0.04) provides only non-HVX v83 models.
       # v85 models have HVX/VTCM; compiler support is in upstream LLVM main,
       # and is absent from this LLVM 23 release branch. See README.md.
-      HEXAGON_ARCH_VERSIONS: v68 v69 v73 v75 v79 v81
+      # PRs and pushes cover legacy QFloat, v79+ QFloat, and BF16/v81 IEEE behavior.
+      # Manual runs and the weekly schedule cover every version.
+      HEXAGON_ARCH_VERSIONS: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'v68 v69 v73 v75 v79 v81' || 'v68 v79 v81' }}
 
     steps:
       - name: Checkout Ripple test suite
@@ -227,16 +234,14 @@ jobs:
       - name: Install Ripple Compiler
         run: cmake --install build --prefix ${{ github.workspace }}/install
 
-      - name: Build and install Ripple compiler-rt for each Hexagon version
-        id: compiler_rt
+      - name: Build compiler-rt and run tests for each Hexagon version
         shell: bash
         run: |
-          read -r -a arch_versions <<< "$HEXAGON_ARCH_VERSIONS"
           compiler_resource_dir="$("${{ github.workspace }}/install/bin/clang" --print-resource-dir)"
-          printf '### Hexagon compiler-rt results\n\n| Version | Stage | Result |\n| --- | --- | --- |\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '### Hexagon results\n\n| Version | Stage | Result |\n| --- | --- | --- |\n' >> "$GITHUB_STEP_SUMMARY"
 
           result=0
-          for arch_version in "${arch_versions[@]}"; do
+          for arch_version in $HEXAGON_ARCH_VERSIONS; do
             build_dir="build-compiler-rt-$arch_version"
             runtime_dir="$compiler_resource_dir/ripple/$arch_version"
             echo "::group::Ripple compiler-rt ($arch_version)"
@@ -276,42 +281,22 @@ jobs:
                 -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=eld" \
                 -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT" && \
                cmake --build "$build_dir" && \
-               cmake --install "$build_dir" --prefix "$runtime_dir" && \
-               touch "$runtime_dir/.installed"; then
-              status=PASS
+               cmake --install "$build_dir" --prefix "$runtime_dir"; then
+              echo "::endgroup::"
+              printf '| %s | compiler-rt | PASS |\n' "$arch_version" >> "$GITHUB_STEP_SUMMARY"
             else
               echo "::error title=Hexagon $arch_version compiler-rt::Runtime configure, build, or install failed"
-              status=FAIL
-              result=1
-            fi
-            echo "::endgroup::"
-            printf '| %s | compiler-rt | %s |\n' "$arch_version" "$status" >> "$GITHUB_STEP_SUMMARY"
-          done
-          exit "$result"
-
-      - name: Build and run Ripple Test Suite in each FP mode
-        # A failed runtime must not prevent testing the other versions.
-        if: ${{ !cancelled() && (steps.compiler_rt.outcome == 'success' || steps.compiler_rt.outcome == 'failure') }}
-        shell: bash
-        run: |
-          read -r -a arch_versions <<< "$HEXAGON_ARCH_VERSIONS"
-          fp_modes=(default ieee)
-          compiler_resource_dir="$("${{ github.workspace }}/install/bin/clang" --print-resource-dir)"
-          printf '### Hexagon test results\n\n| Version | Stage | Result |\n| --- | --- | --- |\n' >> "$GITHUB_STEP_SUMMARY"
-
-          result=0
-          for arch_version in "${arch_versions[@]}"; do
-            runtime_dir="$compiler_resource_dir/ripple/$arch_version"
-            if [ ! -f "$runtime_dir/.installed" ]; then
-              echo "::error title=Hexagon $arch_version tests::Both FP modes are blocked because compiler-rt was not installed"
-              for fp_mode in "${fp_modes[@]}"; do
+              echo "::endgroup::"
+              printf '| %s | compiler-rt | FAIL |\n' "$arch_version" >> "$GITHUB_STEP_SUMMARY"
+              # Skip this version's tests, but still build and test the others.
+              for fp_mode in default ieee; do
                 printf '| %s | %s | BLOCKED (compiler-rt failed) |\n' "$arch_version" "$fp_mode" >> "$GITHUB_STEP_SUMMARY"
               done
               result=1
               continue
             fi
             emulator="$HEXAGON_TOOLS_ROOT/bin/hexagon-sim;--m$arch_version;--simulated_returnval;--"
-            for fp_mode in "${fp_modes[@]}"; do
+            for fp_mode in default ieee; do
               fp_flags=""
               build_dir="build-ripple-test-suite-$arch_version"
               if [ "$fp_mode" = ieee ]; then
