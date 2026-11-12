@@ -6,6 +6,10 @@ Every test app supports the following options:
 -o <filename>   Redirect the output to the specified file instead of the standard output.
 --repeat <n>   Repeat each test <n> times and report the last result. By default,
                 tests are repeated 5 times.
+--seed <n>     Offset the per-test input seeds of tests with their own
+                deterministic generators (currently the FFT tests), e.g. to
+                sweep inputs without rebuilding. Defaults to 0. Tests that use
+                rand() are unaffected.
 ```
 
 `check` builds the test executables and runs them through CTest. Configure
@@ -31,6 +35,21 @@ also select executables with `ctest -R <pattern>` and override concurrency
 with `ctest -j <jobs>` from the build directory. The repeat-count setting
 applies to CMake/CTest runs; direct executable invocations still default to
 five iterations and accept `--repeat`.
+
+## FFT tests
+
+The `vectorkernels` app includes single-channel radix-2 DIT and DIF FFTs,
+normalized inverse transforms, bit reversal, and FFT-based linear convolution.
+FFT tests cover 2 through 2,048 complex samples; convolution tests cover input
+lengths 1 through 512. All targets run with aligned DRAM buffers, and Hexagon
+also runs with VTCM buffers. References use scalar double precision FFTs,
+cross-checked against an independent double precision DFT for small
+transforms. Each kernel's normwise error is bounded by its expected
+precision, which grows with the transform size because the ported kernels
+generate twiddles incrementally in FP32. Each case seeds its own inputs, so
+they do not depend on test order or the C library.
+The known Hexagon v81 IEEE-mode FP32 arithmetic failure also affects FFTs;
+those cases execute as XFAILs, while integer bit reversal must still pass.
 
 ## Note on switching between cmake configurations
 

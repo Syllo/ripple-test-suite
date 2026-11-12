@@ -97,6 +97,11 @@ public:
   /// @brief: Returns a random number uniformly distributed in [0.0, 1.0)
   double random() const { return (double)rand() / RAND_MAX; }
 
+  /// @brief: Returns the --seed command line value (default 0). Tests with
+  /// their own deterministic generators mix it into per-test seeds so input
+  /// sweeps need no rebuild; rand()-based inputs are unaffected.
+  unsigned long long seed() const { return m_seed; }
+
 #ifdef __hexagon__
   /// On Hexagon, tests may use VTCM memory. There is no way to share VTCM
   /// between tests, every test may use the whole allocated VTCM block. This
@@ -109,6 +114,7 @@ public:
 #endif
 
 private:
+  unsigned long long m_seed = 0;
 #ifdef __hexagon__
 #ifndef HEXAGONE_STANDALONE
   unsigned int m_vtcmCtx = 0;

@@ -10,6 +10,8 @@
 #include <ripple-test-suite/ripple-test-suite.h>
 
 #include <cassert>
+#include <cerrno>
+#include <cstdlib>
 #include <iostream>
 #include <string>
 
@@ -170,8 +172,23 @@ TestFramework::~TestFramework() {
 
 void TestFramework::init(int argc, char *argv[]) {
   for (int i = 1; i < argc; ++i) {
+    if (std::string(argv[i]) == "--seed") {
+      // Accept only a non-empty decimal value in range; strtoull alone would
+      // accept a sign (wrapping "-1"), leading spaces, and trailing garbage.
+      const char *arg = i + 1 < argc ? argv[++i] : "";
+      char *end = nullptr;
+      errno = 0;
+      bool valid = *arg >= '0' && *arg <= '9';
+      if (valid)
+        m_seed = std::strtoull(arg, &end, 10);
+      if (!valid || *end != '\0' || errno == ERANGE) {
+        std::cerr << "Invalid --seed value '" << arg
+                  << "': expected a non-negative decimal integer" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
 #ifdef __hexagon__
-    if (std::string(argv[i]) == "--vtcm-size" && i + 1 < argc)
+    else if (std::string(argv[i]) == "--vtcm-size" && i + 1 < argc)
       m_vtcmSize = std::stol(argv[++i]);
 #endif
   }
