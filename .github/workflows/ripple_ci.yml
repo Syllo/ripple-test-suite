@@ -297,6 +297,8 @@ jobs:
             if cmake -G Ninja -S ripple-test-suite -B "$build_dir" \
                 -DCMAKE_SYSTEM_NAME=HexagonStandalone \
                 -DCMAKE_BUILD_TYPE=Release \
+                -DRIPPLE_TEST_SUITE_TEST_JOBS=4 \
+                -DRIPPLE_TEST_SUITE_TEST_REPEAT=1 \
                 -DCMAKE_CXX_COMPILER=${{ github.workspace }}/install/bin/clang++ \
                 -DCMAKE_CXX_FLAGS="-m${{ matrix.arch_version }} -mhvx -mhvx-length=128B $fp_flags -std=c++11 -stdlib=libstdc++" \
                 -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT" \

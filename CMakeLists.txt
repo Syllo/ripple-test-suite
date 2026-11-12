@@ -2,7 +2,16 @@ cmake_minimum_required(VERSION 3.14.3)
 
 project(ripple-test-suite CXX)
 
-set(RIPPLE_TEST_SUITE_LAST_TEST_APP "")
+set(RIPPLE_TEST_SUITE_TEST_JOBS 4 CACHE STRING
+    "Maximum number of test executables to run concurrently")
+set(RIPPLE_TEST_SUITE_TEST_REPEAT 1 CACHE STRING
+    "Number of kernel iterations per test when running CMake test targets")
+
+foreach(test_option RIPPLE_TEST_SUITE_TEST_JOBS RIPPLE_TEST_SUITE_TEST_REPEAT)
+  if(NOT "${${test_option}}" MATCHES "^[1-9][0-9]*$")
+    message(FATAL_ERROR "${test_option} must be a positive integer")
+  endif()
+endforeach()
 
 # The AArch64 SME tests use a fixed streaming vector length. CI can override
 # this for the QEMU version it runs with.
@@ -45,11 +54,11 @@ if(NOT ${BUILD_TARGET} STREQUAL "Hexagon" AND ${CMAKE_SYSTEM_NAME} STREQUAL "Hex
           " (BUILD_TARGET = \'${BUILD_TARGET}\'), your build configuration is inconsistent!")
 endif()
 
-### Create a target corresponding to a test executable. This target will be
-### executed as a dependency from the `check` target e.g. by running
-### `ninja check`. Test targets run in the same order as the order of
-### `add_test_app` calls. When cross-compiling, test targets run under
-### the correspoding emulator (see CROSSCOMPILING_EMULATOR).
+### Create a test executable, a CTest entry, and an individual test-<target>
+### target. `check` builds the executables and runs them through CTest,
+### which schedules them with the configured job limit.
+### When cross-compiling, tests run under the corresponding emulator
+### (see CROSSCOMPILING_EMULATOR).
 ### The function takes the name of the executable target as the positional
 ### parameter. The following optional named parameters are:
 ###   - DEPENDS: list of additional dependencies;
@@ -86,27 +95,26 @@ function(add_test_app target)
     endif()
   endif()
 
-  # The target name is replaced with executable, unless cross-compiling.
-  set(TEST_COMMAND "${target}")
+  # CMake resolves the executable target and its configured emulator.
+  set(TEST_COMMAND "${target}" --repeat "${RIPPLE_TEST_SUITE_TEST_REPEAT}")
   list(APPEND TEST_COMMAND ${TEST_ARGS})
 
-  set(TEST_TARGET "test-${target}") 
+  add_test(NAME ${target} COMMAND ${TEST_COMMAND} ${FILES})
+
+  set(TEST_TARGET "test-${target}")
 
   add_custom_target(${TEST_TARGET}
-    COMMAND ${TEST_COMMAND} ${ARG_UNPARSED_ARGUMENTS}
-    COMMENT "${comment}"
+    COMMAND ${TEST_COMMAND} ${FILES}
+    VERBATIM
     USES_TERMINAL
     )
 
-  add_dependencies(check ${TEST_TARGET})
+  add_dependencies(check ${target})
+  add_dependencies(${TEST_TARGET} ${target})
 
   if (ARG_DEPENDS)
+    add_dependencies(check ${ARG_DEPENDS})
     add_dependencies(${TEST_TARGET} ${ARG_DEPENDS})
-  endif()
-
-  if(NOT ${RIPPLE_TEST_SUITE_LAST_TEST_APP} STREQUAL "")
-    add_dependencies(${TEST_TARGET} ${RIPPE_TEST_SUITE_LAST_TEST_APP})
-    set(RIPPLE_TEST_SUITE_LAST_TEST_APP ${TEST_TARGET})
   endif()
 endfunction()
 
@@ -164,7 +172,13 @@ if(${BUILD_TARGET} STREQUAL "Hexagon")
   set(RIPPLE_TEST_INCLUDE_HVX_RT_LIB ON)
 endif()
 
-add_custom_target(check)
+enable_testing()
+add_custom_target(check
+  COMMAND ${CMAKE_CTEST_COMMAND} --build-config "$<CONFIG>"
+          --parallel "${RIPPLE_TEST_SUITE_TEST_JOBS}" --verbose
+          --output-on-failure
+  VERBATIM
+  USES_TERMINAL)
 
 set(RIPPLE_TEST_SUITE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 

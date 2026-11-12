@@ -4,9 +4,33 @@ Every test app supports the following options:
 
 ```
 -o <filename>   Redirect the output to the specified file instead of the standard output.
--r <number>     Repeat each test <number> times and report the last result. By default,
+--repeat <n>   Repeat each test <n> times and report the last result. By default,
                 tests are repeated 5 times.
 ```
+
+`check` builds the test executables and runs them through CTest. Configure
+`RIPPLE_TEST_SUITE_TEST_JOBS` to limit concurrent executables and
+`RIPPLE_TEST_SUITE_TEST_REPEAT` to set iterations per test. For an existing
+configured build:
+
+```console
+$ cmake -S . -B build -DRIPPLE_TEST_SUITE_TEST_JOBS=4 -DRIPPLE_TEST_SUITE_TEST_REPEAT=1
+$ cmake --build build --target check
+```
+
+The CMake/CTest defaults are four concurrent executables and one iteration,
+matching Hexagon CI. For native timing runs, configure
+`RIPPLE_TEST_SUITE_TEST_JOBS=1` and `RIPPLE_TEST_SUITE_TEST_REPEAT=5` to measure
+one executable at a time with repeated iterations.
+Every case still runs its preparation and verification;
+XFAIL, XPASS, and crash handling are unchanged. CTest retains output per
+executable under `build/Testing/Temporary/LastTest.log`.
+
+Individual `test-<app>` targets remain available. After building, CTest can
+also select executables with `ctest -R <pattern>` and override concurrency
+with `ctest -j <jobs>` from the build directory. The repeat-count setting
+applies to CMake/CTest runs; direct executable invocations still default to
+five iterations and accept `--repeat`.
 
 ## Note on switching between cmake configurations
 
