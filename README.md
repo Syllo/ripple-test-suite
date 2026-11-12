@@ -115,9 +115,14 @@ scoped XFAILs; the affected tests still run, and crashes and unexpected passes
 fail the check.
 The `__has_bf16__` guards exclude bf16 tests before v81; fp16 tests remain
 enabled. Both compiler-rt and the test suite use the selected architecture, and
-the simulator is passed that version explicitly. Each architecture job builds
-the compiler and compiler-rt once, then reuses them for separate test-suite
-builds in each FP mode.
+the simulator is passed that version explicitly. A single Hexagon job builds
+the compiler once, then builds compiler-rt for each version. Its thread libraries
+use version-specific instructions and SDK headers, so each version has its own
+runtime install. Both FP-mode test builds select that install with
+`-resource-dir`. The job runs every available version and mode even after a
+failure, with separate log groups, error annotations, and a results table in
+the job summary. A failed runtime blocks only its version's two FP modes;
+any runtime or test failure still fails the job.
 
 v67 covers a target without `_Float16`. With the LLVM FP16 type and HVX math
 header guards, the v67 math sources pass compiler-only syntax checks. Runtime
