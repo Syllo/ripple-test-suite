@@ -32,6 +32,17 @@ with `ctest -j <jobs>` from the build directory. The repeat-count setting
 applies to CMake/CTest runs; direct executable invocations still default to
 five iterations and accept `--repeat`.
 
+## FFT tests
+
+The `vectorkernels` app includes single-channel radix-2 DIT and DIF FFTs,
+normalized inverse transforms, bit reversal, and FFT-based linear convolution.
+FFT tests cover 2 through 2,048 complex samples; convolution tests cover input
+lengths 1 through 512. All targets run with aligned DRAM buffers, and Hexagon
+also runs with VTCM buffers. References use scalar `std::complex` arithmetic;
+small transforms additionally use an independent double precision DFT.
+The known Hexagon v81 IEEE-mode FP32 arithmetic failure also affects FFTs;
+those cases execute as XFAILs, while integer bit reversal must still pass.
+
 ## Note on switching between cmake configurations
 
 When switching between X86/Hexagon standalone/Hexagon device/etc it is often necessary to 
