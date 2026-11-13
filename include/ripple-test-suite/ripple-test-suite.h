@@ -19,6 +19,8 @@
 #include <string>
 #include <vector>
 
+#include <ripple-test-suite/vector-size.h>
+
 namespace ripple_test_suite {
 
 namespace detail {
@@ -288,23 +290,5 @@ public:
 };
 
 inline double Test::randn() const { return F().random(); }
-
-// TODO: Investigate why templates don't work.
-#if defined __x86_64__
-// template <typename T>
-// constexpr size_t RIPPLE_BLOCK_SIZE(const T&) {
-//  return 8;
-//}
-#define RIPPLE_BLOCK_SIZE(T) (8)
-#elif defined __HVX__
-// template <typename T>
-// constexpr size_t RIPPLE_BLOCK_SIZE(const T&) {
-//  return __HVX_LENGTH__ / sizeof(T);
-//}
-#define RIPPLE_BLOCK_SIZE(T) (__HVX_LENGTH__ / sizeof(T))
-#elif defined __aarch64__
-// TODO: Choose optimal block size based on architecture features such as SVE.
-#define RIPPLE_BLOCK_SIZE(T) (8)
-#endif
 
 } // namespace ripple_test_suite

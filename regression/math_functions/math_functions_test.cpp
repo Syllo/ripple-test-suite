@@ -156,7 +156,7 @@ public:
   }
 };
 
-// With 64 FP16 elements per 128-byte block, exercise two full blocks and a tail.
+// Exercise full vector blocks and a scalar tail for FP32/FP16/BF16.
 enum { N = 129 };
 
 // Scalar math functions tests
@@ -258,7 +258,8 @@ public:
 template <typename T, float (*REF_OP)(float), T (*RIPPLE_OP)(T)>
 class RippleUnaryDomainTest : public TestBase<T> {
 public:
-  RippleUnaryDomainTest(TestFramework &TF) : TestBase<T>(TF, 128 / sizeof(T)) {}
+  RippleUnaryDomainTest(TestFramework &TF)
+      : TestBase<T>(TF, RIPPLE_BLOCK_SIZE(T)) {}
 
   std::pair<bool, std::string> xfail() const override {
 #if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
@@ -314,7 +315,8 @@ public:
 template <typename T, float (*REF_OP)(float), T (*RIPPLE_OP)(T)>
 class RippleUnaryZeroTest : public TestBase<T> {
 public:
-  RippleUnaryZeroTest(TestFramework &TF) : TestBase<T>(TF, 128 / sizeof(T)) {}
+  RippleUnaryZeroTest(TestFramework &TF)
+      : TestBase<T>(TF, RIPPLE_BLOCK_SIZE(T)) {}
 
   std::pair<bool, std::string> xfail() const override {
 #if defined(__hexagon__) && defined(__HVX__) && defined(__HVX_IEEE_FP__) && \
@@ -367,7 +369,8 @@ public:
 template <typename T, T (*RIPPLE_OP)(T, T)>
 class RipplePowDomainTest : public TestBase<T> {
 public:
-  RipplePowDomainTest(TestFramework &TF) : TestBase<T>(TF, 128 / sizeof(T)) {}
+  RipplePowDomainTest(TestFramework &TF)
+      : TestBase<T>(TF, RIPPLE_BLOCK_SIZE(T)) {}
 
   std::pair<bool, std::string> xfail() const override {
 #ifdef __hexagon__
