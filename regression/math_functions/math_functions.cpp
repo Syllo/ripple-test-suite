@@ -7,16 +7,16 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <ripple-test-suite/ripple-test-suite.h>
+
 #include "math_functions.h"
 #include <ripple.h>
 #include <stdio.h>
 
-#define HVX_VEC_BYTES 128 // HVX vector size in bytes
-
 // Unary math function
 template <typename T, T (*OP)(T)>
 void Ripple_unary_math(size_t N, T *output, const T *input) {
-  auto BlockShape = ripple_set_block_shape(0, HVX_VEC_BYTES / sizeof(T));
+  auto BlockShape = ripple_set_block_shape(0, RIPPLE_BLOCK_SIZE(T));
   ripple_parallel(BlockShape, 0);
   for (size_t i = 0; i < N; i++)
     output[i] = OP(input[i]);
@@ -25,7 +25,7 @@ void Ripple_unary_math(size_t N, T *output, const T *input) {
 // Binary math function
 template <typename T, T (*OP)(T, T)>
 void Ripple_binary_math(size_t N, T *output, const T *input1, const T *input2) {
-  auto BlockShape = ripple_set_block_shape(0, HVX_VEC_BYTES / sizeof(T));
+  auto BlockShape = ripple_set_block_shape(0, RIPPLE_BLOCK_SIZE(T));
   ripple_parallel(BlockShape, 0);
   for (size_t i = 0; i < N; i++)
     output[i] = OP(input1[i], input2[i]);

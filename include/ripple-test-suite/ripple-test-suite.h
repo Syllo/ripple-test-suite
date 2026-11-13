@@ -19,6 +19,14 @@
 #include <string>
 #include <vector>
 
+#if defined(__x86_64__)
+#include <immintrin.h>
+#elif defined(__HVX__)
+#include <hexagon_types.h>
+#elif defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 namespace ripple_test_suite {
 
 namespace detail {
@@ -289,22 +297,20 @@ public:
 
 inline double Test::randn() const { return F().random(); }
 
-// TODO: Investigate why templates don't work.
 #if defined __x86_64__
-// template <typename T>
-// constexpr size_t RIPPLE_BLOCK_SIZE(const T&) {
-//  return 8;
-//}
-#define RIPPLE_BLOCK_SIZE(T) (8)
+// Match the widest fixed-size vector enabled by the compiler's target flags.
+#if defined(__AVX512F__)
+#define RIPPLE_BLOCK_SIZE(T) (sizeof(__m512) / sizeof(T))
+#elif defined(__AVX__)
+#define RIPPLE_BLOCK_SIZE(T) (sizeof(__m256) / sizeof(T))
+#else
+#define RIPPLE_BLOCK_SIZE(T) (sizeof(__m128) / sizeof(T))
+#endif
 #elif defined __HVX__
-// template <typename T>
-// constexpr size_t RIPPLE_BLOCK_SIZE(const T&) {
-//  return __HVX_LENGTH__ / sizeof(T);
-//}
-#define RIPPLE_BLOCK_SIZE(T) (__HVX_LENGTH__ / sizeof(T))
+#define RIPPLE_BLOCK_SIZE(T) (sizeof(HVX_Vector) / sizeof(T))
 #elif defined __aarch64__
-// TODO: Choose optimal block size based on architecture features such as SVE.
-#define RIPPLE_BLOCK_SIZE(T) (8)
+// SVE types are sizeless; use NEON for a compile-time block size.
+#define RIPPLE_BLOCK_SIZE(T) (sizeof(uint8x16_t) / sizeof(T))
 #endif
 
 } // namespace ripple_test_suite
