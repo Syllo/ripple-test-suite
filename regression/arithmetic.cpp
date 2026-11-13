@@ -27,7 +27,7 @@ namespace {
  */
 template <typename T>
 void add_ripple(size_t N, const T *a, const T *b, T *apb) {
-  auto BS = ripple_set_block_shape(0, 128 / sizeof(T));
+  auto BS = ripple_set_block_shape(0, RIPPLE_BLOCK_SIZE(T));
   ripple_parallel(BS, 0);
   for (size_t i = 0; i < N; i++)
     apb[i] = a[i] + b[i];
@@ -44,7 +44,7 @@ void add_ripple(size_t N, const T *a, const T *b, T *apb) {
  */
 template <typename T>
 void sub_ripple(size_t N, const T *a, const T *b, T *asb) {
-  auto BS = ripple_set_block_shape(0, 128 / sizeof(T));
+  auto BS = ripple_set_block_shape(0, RIPPLE_BLOCK_SIZE(T));
   ripple_parallel(BS, 0);
   for (size_t i = 0; i < N; i++)
     asb[i] = a[i] - b[i];
@@ -61,7 +61,7 @@ void sub_ripple(size_t N, const T *a, const T *b, T *asb) {
  */
 template <typename T>
 void mult_ripple(size_t N, const T *a, const T *b, T *atb) {
-  auto BS = ripple_set_block_shape(0, 128 / sizeof(T));
+  auto BS = ripple_set_block_shape(0, RIPPLE_BLOCK_SIZE(T));
   ripple_parallel(BS, 0);
   for (size_t i = 0; i < N; i++)
     atb[i] = a[i] * b[i];
