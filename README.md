@@ -18,11 +18,11 @@ Every test app supports the following options:
 configured build:
 
 ```console
-$ cmake -S . -B build -DRIPPLE_TEST_SUITE_TEST_JOBS=4 -DRIPPLE_TEST_SUITE_TEST_REPEAT=1
+$ cmake -S . -B build -DRIPPLE_TEST_SUITE_TEST_JOBS=16 -DRIPPLE_TEST_SUITE_TEST_REPEAT=1
 $ cmake --build build --target check
 ```
 
-The CMake/CTest defaults are four concurrent executables and one iteration,
+The CMake/CTest defaults are 16 concurrent executables and one iteration,
 matching Hexagon CI. For native timing runs, configure
 `RIPPLE_TEST_SUITE_TEST_JOBS=1` and `RIPPLE_TEST_SUITE_TEST_REPEAT=5` to measure
 one executable at a time with repeated iterations.
@@ -50,7 +50,7 @@ configured test job limit. Individual `test-regressions_<group>` targets run
 one group. After building, select just these regression groups with:
 
 ```console
-$ ctest --test-dir build -L regressions -j 4 --output-on-failure
+$ ctest --test-dir build -L regressions -j 16 --output-on-failure
 ```
 
 The former single `regressions` executable is replaced by these groups.
@@ -68,7 +68,7 @@ with the configured test job limit. Individual `test-vectorkernels_<group>`
 targets run one group. After building, run just the vector kernel groups with:
 
 ```console
-$ ctest --test-dir build -L vectorkernels -j 4 --output-on-failure
+$ ctest --test-dir build -L vectorkernels -j 16 --output-on-failure
 ```
 
 The former single `vectorkernels` executable is replaced by these groups.

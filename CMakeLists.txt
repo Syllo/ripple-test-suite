@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.14.3)
 
 project(ripple-test-suite CXX)
 
-set(RIPPLE_TEST_SUITE_TEST_JOBS 4 CACHE STRING
+set(RIPPLE_TEST_SUITE_TEST_JOBS 16 CACHE STRING
     "Maximum number of test executables to run concurrently")
 set(RIPPLE_TEST_SUITE_TEST_REPEAT 1 CACHE STRING
     "Number of kernel iterations per test when running CMake test targets")
