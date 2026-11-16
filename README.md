@@ -36,9 +36,27 @@ with `ctest -j <jobs>` from the build directory. The repeat-count setting
 applies to CMake/CTest runs; direct executable invocations still default to
 five iterations and accept `--repeat`.
 
+## Vector kernel groups
+
+Vector kernels run as six separate executables: `vectorkernels_fft`,
+`vectorkernels_convolution`, `vectorkernels_filters`, `vectorkernels_linalg`,
+`vectorkernels_activations`, and `vectorkernels_primitives`. CTest can run
+these groups in parallel, including as separate Hexagon simulator processes.
+
+`cmake --build build --target vectorkernels` builds all six groups.
+`cmake --build build --target test-vectorkernels` builds and runs all groups
+with the configured test job limit. Individual `test-vectorkernels_<group>`
+targets run one group. After building, run just the vector kernel groups with:
+
+```console
+$ ctest --test-dir build -L vectorkernels -j 4 --output-on-failure
+```
+
+The former single `vectorkernels` executable is replaced by these groups.
+
 ## FFT tests
 
-The `vectorkernels` app includes single-channel radix-2 DIT and DIF FFTs,
+The `vectorkernels_fft` app includes single-channel radix-2 DIT and DIF FFTs,
 normalized inverse transforms, bit reversal, and FFT-based linear convolution.
 FFT tests cover 2 through 2,048 complex samples; convolution tests cover input
 lengths 1 through 512. All targets run with aligned DRAM buffers, and Hexagon

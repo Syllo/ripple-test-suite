@@ -21,7 +21,7 @@
 // verifies against FP64 references instead, with normwise tolerances that
 // state each kernel's expected precision on every target, and seeds each
 // case's inputs independently so they do not depend on test order or libc.
-// Use the existing portable vectorkernels app so native and Hexagon cases
+// Build as the portable vectorkernels_fft app so native and Hexagon cases
 // share the same build/test path. Omit the original unused multi-channel
 // references, disabled vector experiments, and debug prints to keep the port
 // focused on its registered single-channel configuration.
