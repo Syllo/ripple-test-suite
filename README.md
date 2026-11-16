@@ -36,6 +36,25 @@ with `ctest -j <jobs>` from the build directory. The repeat-count setting
 applies to CMake/CTest runs; direct executable invocations still default to
 five iterations and accept `--repeat`.
 
+## Regression groups
+
+Regressions run as separate `regressions_arithmetic`, `regressions_reductions`,
+and `regressions_math` executables. Builds with HVX runtime coverage also add
+`regressions_scatter_gather` and `regressions_narrow_shift`. The reductions
+group includes top-k tests on X86 and AArch64; Hexagon still excludes them.
+CTest can run these groups in parallel as separate simulator processes.
+
+`cmake --build build --target regressions` builds all enabled groups.
+`cmake --build build --target test-regressions` builds and runs them with the
+configured test job limit. Individual `test-regressions_<group>` targets run
+one group. After building, select just these regression groups with:
+
+```console
+$ ctest --test-dir build -L regressions -j 4 --output-on-failure
+```
+
+The former single `regressions` executable is replaced by these groups.
+
 ## Vector kernel groups
 
 Vector kernels run as six separate executables: `vectorkernels_fft`,
@@ -250,13 +269,14 @@ $ adb push $HEXAGON_SDK_ROOT/libs/run_main_on_hexagon/ship/hexagon_toolv88_v79/l
 The step above can be done once.
 Note that file names are version-dependent and may need to be adjusted depending on the device and SDK versions.
 
-To run tests e.g. in `regressions`, we can do the following:
+To run a regression group, for example `regressions_arithmetic`, we can do
+the following:
 
 ```console
-$ adb push libregressions.so /data/local/tmp
+$ adb push libregressions_arithmetic.so /data/local/tmp
 $ adb shell
 kalama:/ # cd /data/local/tmp
-kalama:/ # DSP_LIBRARY_PATH=/data/local/tmp ./run_main_on_hexagon 3 libregressions.so unsigned_pd=1 -o result.txt
+kalama:/ # DSP_LIBRARY_PATH=/data/local/tmp ./run_main_on_hexagon 3 libregressions_arithmetic.so unsigned_pd=1 -o result.txt
 kalama:/ # cat result.txt
 ```
 
