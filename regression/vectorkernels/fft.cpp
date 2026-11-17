@@ -648,6 +648,73 @@ void fft_dif(size_t log_n, const float *wms, const float *in, float *out,
   }
 }
 
+// Separate DIF variant with FP64-computed, FP32-stored memory-stage twiddles.
+// Pack the stages m = 32, 64, ... consecutively. Each occupies m floats and
+// starts at a vector-aligned offset m - 32; their total size is 2*N - 32.
+// Generate tables during preparation so run() measures the transform alone.
+template <size_t N, bool Inverse> void precalc_dif_table(float *twiddles) {
+  const double pi = (std::acos)(-1.0);
+  for (size_t m = 2 * ComplexLanes; m <= N; m *= 2) {
+    float *stage = twiddles + m - 2 * ComplexLanes;
+    for (size_t j = 0; j < m / 2; ++j) {
+      double angle = (Inverse ? 2.0 : -2.0) * pi * j / m;
+      stage[2 * j] = static_cast<float>((std::cos)(angle));
+      stage[2 * j + 1] = static_cast<float>((std::sin)(angle));
+    }
+  }
+}
+
+ALWAYS_INLINE
+void in_mem_fft_dif_table_step(size_t log_n, size_t step, const float *twiddles,
+                               const float *in, float *out) {
+  ripple_block_t B = ripple_set_block_shape(RippleLanes, 2, ComplexLanes);
+  size_t v1 = ripple_id(B, 1);
+  size_t m = size_t(1) << step;
+  size_t n = size_t(1) << log_n;
+  const float *stage = twiddles + m - 2 * ComplexLanes;
+  float conj = cplex_conj(B);
+
+  for (size_t k = 0; k < n; k += m) {
+    for (size_t v = 0; v < m / 2; v += ComplexLanes) {
+      const float *weights = ripple_ptr_alignment(stage + 2 * v, VectorBytes);
+      const float *in1 = ripple_ptr_alignment(in + 2 * (k + v), VectorBytes);
+      const float *in2 =
+          ripple_ptr_alignment(in + 2 * (k + v + m / 2), VectorBytes);
+      float *out1 = ripple_ptr_alignment(out + 2 * (k + v), VectorBytes);
+      float *out2 =
+          ripple_ptr_alignment(out + 2 * (k + v + m / 2), VectorBytes);
+      float u = in1[cplex_idx(B, v1)];
+      float t = in2[cplex_idx(B, v1)];
+      float w = weights[cplex_idx(B, v1)];
+      out1[cplex_idx(B, v1)] = u + t;
+      out2[cplex_idx(B, v1)] = cplex_mul(u - t, w, conj);
+    }
+  }
+}
+
+// Same natural-input/bit-reversed-output ordering and inverse normalization
+// as fft_dif(). The final in-register stages retain its original butterflies.
+void fft_dif_table(size_t log_n, const float *wms, const float *twiddles,
+                   const float *in, float *out, float *tmp,
+                   bool normalize = false) {
+  size_t log_lanes = log2(ComplexLanes);
+  ripple_block_t B = ripple_set_block_shape(RippleLanes, 2, ComplexLanes);
+  size_t v1 = ripple_id(B, 1);
+  size_t n = size_t(1) << log_n;
+  float scale = normalize ? 1.0f / float(n) : 1.0f;
+  const float *wrk = in;
+  size_t step = log_n;
+  if (step > log_lanes) {
+    in_mem_fft_dif_table_step(log_n, step--, twiddles, in, tmp);
+    while (step > log_lanes)
+      in_mem_fft_dif_table_step(log_n, step--, twiddles, tmp, tmp);
+    wrk = tmp;
+  }
+  for (size_t i = 0; i < n; i += ComplexLanes)
+    out[cplex_idx(B, i + v1)] =
+        scale * in_reg_fft_dif(step, wrk[cplex_idx(B, i + v1)], wms);
+}
+
 // Independent FP64 DIT/DIF oracle on the scalar unit, which uses IEEE FP64
 // on every target, including Hexagon. It applies the same butterfly network
 // and input/output ordering as the kernels, so verification measures kernel
@@ -814,6 +881,10 @@ constexpr double fft_dif_tol(size_t N) {
   return double(N + 64) * FftUnitRoundoff;
 }
 
+// Precomputed twiddles keep the table variant at the FP32 floor for every N
+// (about 15 * u worst case on v68 QFloat, 24% of this bound).
+constexpr double FftTableTol = 64 * FftUnitRoundoff;
+
 // Identify each FFT case for its input seed. Seeds depend only on the case,
 // not on registration order or the C library's rand(), so every target sees
 // the same inputs and adding or regrouping tests leaves existing inputs alone.
@@ -823,7 +894,9 @@ enum FftCase : uint64_t {
   CaseInverseDit,
   CaseInverseDif,
   CaseRoundTrip,
-  CaseConvolution
+  CaseConvolution,
+  CaseDifTable,
+  CaseInverseDifTable
 };
 
 constexpr uint64_t fft_case_id(FftCase Kind, size_t N, bool UseVtcm) {
@@ -943,6 +1016,53 @@ public:
   bool verify() const override {
     return ReferenceCorrect && fft_close(2 * N, this->Buffers[1], Reference,
                                          Dif ? fft_dif_tol(N) : fft_dit_tol(N));
+  }
+};
+
+template <size_t N, bool Inverse, bool UseVtcm>
+class FftDifTableTest : public FftStorage<N, 3, UseVtcm> {
+  static constexpr size_t TableSize =
+      N > ComplexLanes ? 2 * N - 2 * ComplexLanes : 0;
+  // C++11 new need not honor vector alignment; reserve padding and align the
+  // table explicitly. Coefficients stay in DRAM for both input-storage modes.
+  float TableStorage[TableSize + VectorBytes / sizeof(float)]{};
+  float *Table;
+  complex_t Twiddles[32]{};
+  float Reference[2 * N]{};
+
+public:
+  FftDifTableTest(TestFramework &TF)
+      : FftStorage<N, 3, UseVtcm>(
+            TF, fft_case_id(Inverse ? CaseInverseDifTable : CaseDifTable, N,
+                            UseVtcm)) {
+    size_t offset = 0;
+    Table = get_aligned_ptr(offset, TableStorage, TableSize,
+                            TableSize + VectorBytes / sizeof(float));
+    precalc_wms<N>(Twiddles);
+    if (Inverse)
+      for (complex_t &w : Twiddles)
+        w = std::conj(w);
+  }
+
+  void prepare(unsigned) override {
+    precalc_dif_table<N, Inverse>(Table);
+    this->fill_input(this->Buffers[0], N);
+    fft_ref_fp64(log2(N), this->Buffers[0], Reference, true, Inverse);
+    std::fill(this->Buffers[1], this->Buffers[1] + 2 * N, NAN);
+  }
+
+  std::pair<bool, std::string> xfail() const override {
+    return fft_arithmetic_xfail();
+  }
+
+  void run(unsigned) override {
+    fft_dif_table(log2(N), reinterpret_cast<const float *>(Twiddles), Table,
+                  this->Buffers[0], this->Buffers[1], this->Buffers[2],
+                  Inverse);
+  }
+
+  bool verify() const override {
+    return fft_close(2 * N, this->Buffers[1], Reference, FftTableTol);
   }
 };
 
@@ -1188,6 +1308,32 @@ REGISTER_CONV_SIZES(false, DRAM)
 #ifdef __hexagon__
 REGISTER_FFT_SIZES(true, VTCM)
 REGISTER_CONV_SIZES(true, VTCM)
+#endif
+
+// Separate diagnostic variant of the ported DIF: precomputed memory-stage
+// twiddles isolate the incremental twiddle recurrence as its error source.
+#define REGISTER_DIF_TABLE(N, VTCM, LOCATION)                                  \
+  DefineTest<FftDifTableTest<N, false, VTCM>> TTableDif##N##LOCATION(          \
+      "FFT.DIF.Table<N=" #N "," #LOCATION ">");                                \
+  DefineTest<FftDifTableTest<N, true, VTCM>> TTableInverseDif##N##LOCATION(    \
+      "IFFT.DIF.Table<N=" #N "," #LOCATION ">");
+
+#define REGISTER_DIF_TABLE_SIZES(VTCM, LOCATION)                               \
+  REGISTER_DIF_TABLE(2, VTCM, LOCATION)                                        \
+  REGISTER_DIF_TABLE(4, VTCM, LOCATION)                                        \
+  REGISTER_DIF_TABLE(8, VTCM, LOCATION)                                        \
+  REGISTER_DIF_TABLE(16, VTCM, LOCATION)                                       \
+  REGISTER_DIF_TABLE(32, VTCM, LOCATION)                                       \
+  REGISTER_DIF_TABLE(64, VTCM, LOCATION)                                       \
+  REGISTER_DIF_TABLE(128, VTCM, LOCATION)                                      \
+  REGISTER_DIF_TABLE(256, VTCM, LOCATION)                                      \
+  REGISTER_DIF_TABLE(512, VTCM, LOCATION)                                      \
+  REGISTER_DIF_TABLE(1024, VTCM, LOCATION)                                     \
+  REGISTER_DIF_TABLE(2048, VTCM, LOCATION)
+
+REGISTER_DIF_TABLE_SIZES(false, DRAM)
+#ifdef __hexagon__
+REGISTER_DIF_TABLE_SIZES(true, VTCM)
 #endif
 
 } // namespace

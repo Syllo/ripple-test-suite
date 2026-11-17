@@ -47,7 +47,8 @@ cross-checked against an independent double precision DFT for small
 transforms. Each kernel's normwise error is bounded by its expected
 precision, which grows with the transform size because the ported kernels
 generate twiddles incrementally in FP32. Each case seeds its own inputs, so
-they do not depend on test order or the C library.
+they do not depend on test order or the C library. A separate DIF variant
+with precomputed memory-stage twiddles is checked at the FP32 error floor.
 The known Hexagon v81 IEEE-mode FP32 arithmetic failure also affects FFTs;
 those cases execute as XFAILs, while integer bit reversal must still pass.
 
